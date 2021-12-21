@@ -446,7 +446,7 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
                 break;
                 case MSG2:
                     if(HIWORD(wp)==LBN_DBLCLK){
-                        h::pressKeyAll(h::stringToWstring(h::replaceAll(h::getListStr(list,SendMessage(list,LB_GETCURSEL,0,0)),"[ENTER]",h::ENTER)));
+                        h::pressKeyAll(h::stringToWstring(h::replaceAll(h::getListStr(list,SendMessage(list,LB_GETCURSEL,0,0)),"[ENTER]",h::constGlobalData::ENTER)));
                     }
                     
                 break;
