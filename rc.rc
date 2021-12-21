@@ -1,0 +1,15 @@
+#include "rc.h"
+WAICON ICON "wa.ico"
+HELPPAGE TEXT "a.txt"
+MAINMENU MENU{
+    POPUP "File(&F)"{
+        MENUITEM "FIle Open",FILEOPEN
+        MENUITEM "File Save",FILESAVE
+    }
+    POPUP "Tool(&T)"{
+        MENUITEM "New Window",NEWWINDOW
+    }
+    POPUP "Help(&H)"{
+        MENUITEM "Show Help(&S)",SHOWHELP
+    }
+}

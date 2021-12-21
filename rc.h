@@ -1,0 +1,4 @@
+#define FILEOPEN 1000
+#define FILESAVE 1001
+#define NEWWINDOW 1002
+#define SHOWHELP 1003
