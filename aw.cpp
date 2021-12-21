@@ -8,7 +8,6 @@
 #include <tuple>
 #include <memory>
 #include <cmath>
-#include <iostream>
 #include "rc.h"
 namespace h{
         namespace constGlobalData{
