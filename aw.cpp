@@ -1,14 +1,14 @@
 #include <windows.h>
 #include <string>
+#include <regex>
 #include <vector>
 #include <filesystem>
 #include <fstream>
-#include <unordered_map>
-#include <regex>
 #include <tuple>
+#include <unordered_map>
+#include <utility>
 #include <memory>
 #include <cmath>
-#include <iostream>
 #include "rc.h"
 namespace h{
         namespace constGlobalData{
@@ -22,6 +22,9 @@ namespace h{
             constexpr auto MODE_INPUT=MAINWINDOWNAME ":Input";
             constexpr auto MODE_OUTPUT=MAINWINDOWNAME ":Output";
             constexpr auto MAINMENU=TEXT("MAINMENU");
+        };
+        namespace global{
+            std::vector<HWND> hwnds;
         };
         namespace cast{
         template <class T>
@@ -67,7 +70,7 @@ namespace h{
         return std::abs(left)-std::abs(right);//sub funcsion
     }
     template <class T>
-    inline auto fit(T num,T left,T right){
+    inline auto fitNum(T num,T left,T right){
         return num-absSub(left,right);
     }
     inline auto replaceAll(std::string str,std::string beforeStr,std::string afterStr){
@@ -107,7 +110,7 @@ namespace h{
     inline T customBool(bool check,T trueT,T falseT)noexcept(false){
         return check?trueT:falseT;
     }
-    std::string &linkStr(std::string &str,std::vector<std::string> array){
+    std::string &linkStr(std::string &str,const std::vector<std::string> array)noexcept(true){
         for(auto &obj:array){
             str+=obj;
         }
@@ -132,9 +135,8 @@ namespace h{
         }
         return data;
     }
-    //cast::toStringを使うことでtemplate使わないでいい
     inline auto vecToString(std::vector<std::string> vec,std::string between=""){
-        std::string re;//似たような処理が多い
+        std::string re;
         for(auto &str:vec){
             re+=str+between;
         }
@@ -157,21 +159,20 @@ namespace h{
         return map.count(key);
     }
     template <class T>
-    void noHitMapValueReplace(T &map,typename T::key_type key,typename T::mapped_type replace=typename T::mapped_type()){
+    inline void noHitMapValueReplace(T &map,const typename T::key_type key,const typename T::mapped_type replace=typename T::mapped_type())noexcept(true){
         if(!beMapItem(map,key))map.emplace(key,replace);
     }
-    template <class T=std::string>
-    inline auto getWindowStr(HWND hwnd){//
+    inline auto getWindowStr(const HWND hwnd)noexcept(false){//
         const int BUFSIZE=GetWindowTextLength(hwnd)+1;
         std::unique_ptr<TCHAR> text(new TCHAR[BUFSIZE]);
         GetWindowText(hwnd,text.get(),BUFSIZE);
-        return T(text.get(),text.get()+BUFSIZE-1);
+        return std::string(text.get(),text.get()+BUFSIZE-1);
     }
-    inline auto getListStr(HWND list,int id){//
-        const int BUFSIZE=SendMessage(list,LB_GETTEXTLEN,id,0)+1;
-        std::unique_ptr<TCHAR> text(new TCHAR[BUFSIZE]);
-        SendMessage(list,LB_GETTEXT,id,(LPARAM)text.get());
-        return std::string(text.get(),text.get()+BUFSIZE-1);//new decltype(T[0])
+    inline auto getListStr(const HWND list,int num)noexcept(false){//
+        num=SendMessage(list,LB_GETTEXTLEN,num,0)+1;
+        std::unique_ptr<TCHAR> text(new TCHAR[num]);
+        SendMessage(list,LB_GETTEXT,num,(LPARAM)text.get());
+        return std::string(text.get(),text.get()+num-1);
     }
     enum modeOperator{
         EQUAL,
@@ -190,8 +191,12 @@ namespace h{
         }
         SetWindowLong(hwnd,style,ws);
     }
+    template <class RT,class... T>
+    RT callFunction(RT (*function)(T...),T... arguments){
+        return function(arguments...);
+    }
     template <class getT>
-    class mapManager{
+    class mapManager{//クロージャにする
         public:
         template <class MapT>
         typename getT::mapped_type &get(MapT &map,std::vector<typename getT::key_type> keys){
@@ -363,6 +368,41 @@ namespace h{
             return re;
         }
     };
+    class ResizeManager{
+        private:
+        HWND hwnd;
+        double ratioX,ratioY;
+        std::vector<std::pair<HWND,RECT> > children;
+        public:
+        ResizeManager(HWND hwnd,std::vector<HWND> children):hwnd(hwnd){
+            RECT rect;
+            GetClientRect(hwnd,&rect);
+            ratioX=rect.right;
+            ratioY=rect.bottom;
+            // for(auto &hw:children){
+            //     GetClientRect(hw,&rect);
+            //     this->children.push_back({hw,rect});
+            // }
+            WINDOWPLACEMENT pos;
+            pos.length=sizeof(WINDOWPLACEMENT);
+            for(auto &hw:children){
+                GetWindowPlacement(hw,&pos);
+                this->children.push_back({hw,pos.rcNormalPosition});
+            }
+        }
+        ResizeManager(){
+
+        }
+        void resize(){
+            RECT rect;
+            GetClientRect(hwnd,&rect);
+            double ratioX=rect.right/this->ratioX;
+            double ratioY=rect.bottom/this->ratioY;
+            for(auto &[hw,re]:children){
+                MoveWindow(hw,re.left*ratioX,re.top*ratioY,ratioX*(re.right-re.left),ratioY*(re.bottom-re.top),TRUE);
+            }
+        }
+    };
     inline auto baseStyle(WNDPROC wndproc,LPCSTR name){
         /*static? i should make closure?*/WNDCLASS winc;
         winc.style=CS_VREDRAW|CS_HREDRAW;
@@ -378,18 +418,8 @@ namespace h{
     }
 
 };
-BOOL CALLBACK enumChildSave(HWND hwnd,LPARAM lp){
-    WINDOWPLACEMENT wndPlace;
-    wndPlace.length=sizeof(WINDOWPLACEMENT);
-    GetWindowPlacement(hwnd,&wndPlace);
-    h::INI(h::constGlobalData::SETTING_FILE)
-    .editValue(h::constGlobalData::SECTION_POS,h::getWindowStr(hwnd),h::vecToString(h::cast::toString(wndPlace.rcNormalPosition.left,wndPlace.rcNormalPosition.top,wndPlace.rcNormalPosition.right,wndPlace.rcNormalPosition.bottom)," "))
-    .save();
-    return TRUE;
-}
-BOOL CALLBACK enumChildLoad(HWND hwnd,LPARAM lp){
-    auto rect=h::StrToInt(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(h::constGlobalData::SECTION_POS,h::getWindowStr(hwnd)),4);
-    MoveWindow(hwnd,rect[0],rect[1],rect[2],rect[3],TRUE);
+BOOL CALLBACK addGlobalHwndsChild(HWND hwnd,LPARAM lp){
+    h::global::hwnds.push_back(hwnd);
     return TRUE;
 }
 LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
@@ -406,6 +436,7 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     static OPENFILENAME ofn{0};
     static TCHAR path[MAX_PATH];
     static int count=0;
+    static h::ResizeManager rm;
     std::string str;
     RECT rect;
     switch(msg){
@@ -417,7 +448,6 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
             h::INI(h::constGlobalData::SETTING_FILE).editValue(SECTION_STRING,KEY_WORDLIST,str)
             .editValue(h::constGlobalData::SECTION_POS,MAINWINDOWNAME,h::vecToString(h::cast::toString(rect.left,rect.top,rect.right-rect.left,rect.bottom-rect.top)," "))
             .save();
-            EnumChildWindows(hwnd,enumChildSave,0);
             --count;
             if(0>=count){
                 PostQuitMessage(0);
@@ -426,11 +456,12 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         break;
         case WM_CREATE:
             ++count;
-            SendMessage(CreateWindow(TEXT("BUTTON"),TEXT("Add"),WS_VISIBLE|WS_OVERLAPPEDWINDOW|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS|BS_MULTILINE,0,0,0,0,hwnd,(HMENU)MSG1,LPCREATESTRUCT(lp)->hInstance,NULL),WM_SETICON,ICON_BIG,(LPARAM)LoadIcon(LPCREATESTRUCT(lp)->hInstance,h::constGlobalData::ICON_NAME));
-            SendMessage(CreateWindow(TEXT("BUTTON"),TEXT("Sub"),WS_VISIBLE|WS_OVERLAPPEDWINDOW|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS|BS_MULTILINE,0,0,0,0,hwnd,(HMENU)MSG3,LPCREATESTRUCT(lp)->hInstance,NULL),WM_SETICON,ICON_BIG,(LPARAM)LoadIcon(LPCREATESTRUCT(lp)->hInstance,h::constGlobalData::ICON_NAME));
-            list=CreateWindow(TEXT("LISTBOX"),TEXT(KEY_WORDLIST),WS_HSCROLL|WS_VSCROLL|LBS_NOTIFY |WS_VISIBLE|WS_OVERLAPPEDWINDOW|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,0,0,0,0,hwnd,(HMENU)MSG2,(LPCREATESTRUCT(lp))->hInstance,NULL);
+            GetClientRect(hwnd,&rect);
+            SendMessage(CreateWindow(TEXT("BUTTON"),TEXT("Add"),WS_VISIBLE|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS|BS_MULTILINE,(rect.right/10)*8,0,(rect.right/10)*2,rect.bottom/2,hwnd,(HMENU)MSG1,LPCREATESTRUCT(lp)->hInstance,NULL),WM_SETICON,ICON_BIG,(LPARAM)LoadIcon(LPCREATESTRUCT(lp)->hInstance,h::constGlobalData::ICON_NAME));
+            SendMessage(CreateWindow(TEXT("BUTTON"),TEXT("Sub"),WS_VISIBLE|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS|BS_MULTILINE,(rect.right/10)*8,rect.bottom/2,(rect.right/10)*2,rect.bottom/2,hwnd,(HMENU)MSG3,LPCREATESTRUCT(lp)->hInstance,NULL),WM_SETICON,ICON_BIG,(LPARAM)LoadIcon(LPCREATESTRUCT(lp)->hInstance,h::constGlobalData::ICON_NAME));
+            list=CreateWindow(TEXT("LISTBOX"),TEXT(KEY_WORDLIST),WS_HSCROLL|WS_VSCROLL|LBS_NOTIFY |WS_VISIBLE|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,0,0,(rect.right/10)*8,rect.bottom/2,hwnd,(HMENU)MSG2,(LPCREATESTRUCT(lp))->hInstance,NULL);
             SendMessage(list,WM_SETICON,ICON_BIG,(LPARAM)LoadIcon(LPCREATESTRUCT(lp)->hInstance,h::constGlobalData::ICON_NAME));
-            edit=CreateWindow(TEXT("EDIT"),TEXT(""),WS_SIZEBOX|WS_VISIBLE|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS|ES_MULTILINE|ES_WANTRETURN,0,0,100,100,hwnd,NULL,LPCREATESTRUCT(lp)->hInstance,NULL);
+            edit=CreateWindow(TEXT("EDIT"),TEXT(""),ES_AUTOHSCROLL|ES_AUTOVSCROLL|WS_HSCROLL|WS_VSCROLL|WS_VISIBLE|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS|ES_MULTILINE|ES_WANTRETURN,0,rect.bottom/2,(rect.right/10)*8,rect.bottom/2,hwnd,NULL,LPCREATESTRUCT(lp)->hInstance,NULL);
             SendMessage(edit,WM_SETICON,ICON_BIG,(LPARAM)LoadIcon(LPCREATESTRUCT(lp)->hInstance,h::constGlobalData::ICON_NAME));
             ofn.lStructSize=sizeof(OPENFILENAME);
             ofn.hwndOwner=hwnd;
@@ -445,11 +476,13 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
             for(auto word:h::split(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(SECTION_STRING,KEY_WORDLIST),CELEND)){
                 SendMessage(list,LB_ADDSTRING,0,(LPARAM)word.c_str());
             }
-            {
-                auto re=h::StrToInt(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(h::constGlobalData::SECTION_POS,MAINWINDOWNAME),4);
-                MoveWindow(hwnd,re[0],re[1],re[2],re[3],TRUE);
-                EnumChildWindows(hwnd,enumChildLoad,0);
-            }
+            EnumChildWindows(hwnd,addGlobalHwndsChild,0);
+            rm=std::move(h::ResizeManager(hwnd,h::global::hwnds));
+            // MessageBox(hwnd,h::vecToString(h::cast::toString(m.right,c.right)).c_str(),0,0);
+            
+        break;
+        case WM_SIZE:
+            rm.resize();
         break;
         case WM_RBUTTONDOWN:
             h::windowLong(hwnd,WS_EX_NOACTIVATE,h::customBool(h::getWindowStr(hwnd).compare(h::constGlobalData::MODE_INPUT),h::modeOperator::SUB,h::modeOperator::ADD),true);
@@ -501,9 +534,12 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     return DefWindowProc(hwnd,msg,wp,lp);
 }
 int WINAPI WinMain(HINSTANCE hInstance,HINSTANCE hPrevInstance,PSTR lpCmdLine,int nCmdShow){
+    constexpr auto MAIN_WINDOW_CLASS="MAIN";
+    constexpr auto X=0,Y=1,WIDTH=2,HEIGHT=3;
     MSG msg;
-    h::baseStyle(WndProc,"MAIN");
-    SendMessage(CreateWindowEx(WS_EX_TOPMOST,TEXT("MAIN"),TEXT(h::constGlobalData::MODE_INPUT),WS_VISIBLE|WS_OVERLAPPEDWINDOW,CW_USEDEFAULT,CW_USEDEFAULT,CW_USEDEFAULT,CW_USEDEFAULT,NULL,LoadMenu(hInstance,h::constGlobalData::MAINMENU),hInstance,NULL),WM_SETICON,ICON_BIG,(LPARAM)LoadIcon(hInstance,h::constGlobalData::ICON_NAME));
+    h::baseStyle(WndProc,MAIN_WINDOW_CLASS);
+    auto re=h::StrToInt(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(h::constGlobalData::SECTION_POS,MAINWINDOWNAME),4);
+    SendMessage(CreateWindowEx(WS_EX_TOPMOST,TEXT(MAIN_WINDOW_CLASS),TEXT(h::constGlobalData::MODE_INPUT),WS_VISIBLE|WS_OVERLAPPEDWINDOW,re[X],re[Y],re[WIDTH],re[HEIGHT],NULL,LoadMenu(hInstance,h::constGlobalData::MAINMENU),hInstance,NULL),WM_SETICON,ICON_BIG,(LPARAM)LoadIcon(hInstance,h::constGlobalData::ICON_NAME));
     while(GetMessage(&msg,NULL,0,0)){
         TranslateMessage(&msg);
         DispatchMessage(&msg);
