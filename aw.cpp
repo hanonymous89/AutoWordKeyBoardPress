@@ -374,6 +374,7 @@ namespace h{
         double ratioX,ratioY;
         std::vector<std::pair<HWND,RECT> > children;
         public:
+        //第二引数をなくして自動でchildrenを追加してもいいかも(固定したい奴は指定とかで制御
         ResizeManager(HWND hwnd,std::vector<HWND> children):hwnd(hwnd){
             RECT rect;
             GetClientRect(hwnd,&rect);
