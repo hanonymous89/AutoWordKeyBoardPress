@@ -22,6 +22,10 @@ namespace h{
             constexpr auto MODE_INPUT=MAINWINDOWNAME ":Input";
             constexpr auto MODE_OUTPUT=MAINWINDOWNAME ":Output";
             constexpr auto MAINMENU=TEXT("MAINMENU");
+            constexpr auto ALPHA_GET=1;
+            constexpr auto ALPHA_SET=2;
+            constexpr auto SECTION_SHOW="SHOW";
+            constexpr auto KEY_ALPHA="alpha";
         };
         namespace global{
             std::vector<HWND> hwnds;
@@ -300,13 +304,6 @@ namespace h{
             mapManager<T>().get(data,keys...).erase(delKey);
             return *this;
         }
-        // template <class T,class... KeyT>
-        // inline auto editKey(std::string afterKey,KeyT... keys)noexcept(true){
-        //     std::vector<std::string> Keys{FILE,keys...};
-        //     h::editKey(mapManager<std::unordered_map<std::string,T> >().get(data,Keys),Keys[Keys.size()-1],afterKey);
-        //     return *this;
-        // }
-        //you should use template(mapManager)
         inline auto editValue(const std::string section,const std::string key,std::string after)noexcept(true){
             noHitMapValueReplace(data,section);
             noHitMapValueReplace(data[section],key);
@@ -374,7 +371,6 @@ namespace h{
         double ratioX,ratioY;
         std::vector<std::pair<HWND,RECT> > children;
         public:
-        //第二引数をなくして自動でchildrenを追加してもいいかも(固定したい奴は指定とかで制御
         ResizeManager(HWND hwnd,std::vector<HWND> children):hwnd(hwnd){
             RECT rect;
             GetClientRect(hwnd,&rect);
@@ -423,6 +419,78 @@ BOOL CALLBACK addGlobalHwndsChild(HWND hwnd,LPARAM lp){
     h::global::hwnds.push_back(hwnd);
     return TRUE;
 }
+LRESULT CALLBACK scrollProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
+    PAINTSTRUCT ps;
+    HDC hdc;
+    RECT rect;
+    HBRUSH defb,colorb;
+    static int start=0,end=255,now=0;
+    static bool is_move=false;
+    switch(msg){
+        case WM_PAINT:
+
+        GetClientRect(hwnd,&rect);
+        hdc=BeginPaint(hwnd,&ps);
+        colorb=CreateSolidBrush(RGB(0,255,0));
+        defb=(HBRUSH)SelectObject(hdc,colorb);
+        Rectangle(hdc,now,0,now+10,rect.bottom);
+        FrameRect(hdc,&rect,colorb);
+        TextOut(hdc,now,rect.bottom/2,h::cast::toString(now/(rect.right/end)).c_str(),h::cast::toString(now/(rect.right/end)).size());
+        SelectObject(hdc,defb);
+        DeleteObject(colorb);
+        EndPaint(hwnd,&ps);
+        break;
+        case WM_LBUTTONDOWN:
+        is_move=true;
+        break;
+        case WM_LBUTTONUP:
+        is_move=false;
+        break;
+        case WM_MOUSEMOVE:
+        if(!is_move){
+            break;
+        }
+        now=MAKEPOINTS(lp).x;
+        InvalidateRect(hwnd,NULL,TRUE);
+        UpdateWindow(hwnd);
+        break;
+        case WM_COMMAND:
+            switch(wp){
+                case h::constGlobalData::ALPHA_GET:
+                GetWindowRect(hwnd,&rect);
+                return now/(rect.right/end);
+                // case h::constGlobalData::ALPHA_SET:
+                // now=(int)lp*(rect.right/end);
+                // break;
+            }
+        break;
+    }
+    return DefWindowProc(hwnd,msg,wp,lp);
+}
+LRESULT CALLBACK settingProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
+    static HWND alpha;
+    static h::ResizeManager rm;
+    RECT rect;
+    switch(msg){
+        case WM_DESTROY:
+            h::INI(h::constGlobalData::SETTING_FILE)
+            .editValue(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_ALPHA,h::cast::toString((int)SendMessage(alpha,WM_COMMAND,h::constGlobalData::ALPHA_GET,0)))
+            .save();
+        break;
+        case WM_CREATE:
+        GetClientRect(hwnd,&rect);
+        alpha=CreateWindowEx(WS_EX_TOPMOST,TEXT("SCROLL"),TEXT(""),WS_CHILD|WS_VISIBLE|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,0,0,rect.right/2,rect.bottom/5,hwnd,NULL,LPCREATESTRUCT(lp)->hInstance,NULL);
+        // SendMessage(alpha,WM_COMMAND,h::constGlobalData::ALPHA_SET,h::StrToInt(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_ALPHA),1)[0]);
+        h::global::hwnds.clear();
+        EnumChildWindows(hwnd,addGlobalHwndsChild,0);
+        rm=std::move(h::ResizeManager(hwnd,h::global::hwnds));
+        break;
+        case WM_SIZE:
+        rm.resize();
+        break;
+    }
+    return DefWindowProc(hwnd,msg,wp,lp);
+}
 LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     constexpr int MSG1=1,
                   MSG2=MSG1+1,
@@ -436,7 +504,6 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
                 edit;
     static OPENFILENAME ofn{0};
     static TCHAR path[MAX_PATH];
-    static int count=0;
     static h::ResizeManager rm;
     std::string str;
     RECT rect;
@@ -449,14 +516,11 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
             h::INI(h::constGlobalData::SETTING_FILE).editValue(SECTION_STRING,KEY_WORDLIST,str)
             .editValue(h::constGlobalData::SECTION_POS,MAINWINDOWNAME,h::vecToString(h::cast::toString(rect.left,rect.top,rect.right-rect.left,rect.bottom-rect.top)," "))
             .save();
-            --count;
-            if(0>=count){
-                PostQuitMessage(0);
-            }
+            PostQuitMessage(0);
             
         break;
         case WM_CREATE:
-            ++count;
+            SetLayeredWindowAttributes(hwnd,RGB(0,1,0),h::StrToInt(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_ALPHA),1)[0],LWA_ALPHA);
             GetClientRect(hwnd,&rect);
             SendMessage(CreateWindow(TEXT("BUTTON"),TEXT("Add"),WS_VISIBLE|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS|BS_MULTILINE,(rect.right/10)*8,0,(rect.right/10)*2,rect.bottom/2,hwnd,(HMENU)MSG1,LPCREATESTRUCT(lp)->hInstance,NULL),WM_SETICON,ICON_BIG,(LPARAM)LoadIcon(LPCREATESTRUCT(lp)->hInstance,h::constGlobalData::ICON_NAME));
             SendMessage(CreateWindow(TEXT("BUTTON"),TEXT("Sub"),WS_VISIBLE|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS|BS_MULTILINE,(rect.right/10)*8,rect.bottom/2,(rect.right/10)*2,rect.bottom/2,hwnd,(HMENU)MSG3,LPCREATESTRUCT(lp)->hInstance,NULL),WM_SETICON,ICON_BIG,(LPARAM)LoadIcon(LPCREATESTRUCT(lp)->hInstance,h::constGlobalData::ICON_NAME));
@@ -526,8 +590,8 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
                     );
                     system(std::filesystem::absolute(HELPHTML).string().c_str());
                 break;
-                case NEWWINDOW:
-                    SendMessage(CreateWindowEx(WS_EX_TOPMOST,TEXT("MAIN"),TEXT(h::constGlobalData::MODE_INPUT),WS_VISIBLE|WS_OVERLAPPEDWINDOW,CW_USEDEFAULT,CW_USEDEFAULT,CW_USEDEFAULT,CW_USEDEFAULT,NULL,LoadMenu((HINSTANCE)GetModuleHandle(0),h::constGlobalData::MAINMENU),(HINSTANCE)GetModuleHandle(0),NULL),WM_SETICON,ICON_BIG,(LPARAM)LoadIcon((HINSTANCE)GetModuleHandle(0),h::constGlobalData::ICON_NAME));
+                case OPENSETTING:
+                    CreateWindow(TEXT("SETTING"),TEXT("setting"),WS_VISIBLE|WS_OVERLAPPEDWINDOW,CW_USEDEFAULT,CW_USEDEFAULT,CW_USEDEFAULT,CW_USEDEFAULT,NULL,NULL,(HINSTANCE)GetModuleHandle(0),NULL);
                 break;
             }
         break;
@@ -539,8 +603,12 @@ int WINAPI WinMain(HINSTANCE hInstance,HINSTANCE hPrevInstance,PSTR lpCmdLine,in
     constexpr auto X=0,Y=1,WIDTH=2,HEIGHT=3;
     MSG msg;
     h::baseStyle(WndProc,MAIN_WINDOW_CLASS);
+    h::baseStyle(scrollProc,"SCROLL");
+    h::baseStyle(settingProc,"SETTING");
+    
     auto re=h::StrToInt(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(h::constGlobalData::SECTION_POS,MAINWINDOWNAME),4);
-    SendMessage(CreateWindowEx(WS_EX_TOPMOST,TEXT(MAIN_WINDOW_CLASS),TEXT(h::constGlobalData::MODE_INPUT),WS_VISIBLE|WS_OVERLAPPEDWINDOW,re[X],re[Y],re[WIDTH],re[HEIGHT],NULL,LoadMenu(hInstance,h::constGlobalData::MAINMENU),hInstance,NULL),WM_SETICON,ICON_BIG,(LPARAM)LoadIcon(hInstance,h::constGlobalData::ICON_NAME));
+    SendMessage(CreateWindowEx(WS_EX_TOPMOST|WS_EX_LAYERED,TEXT(MAIN_WINDOW_CLASS),TEXT(h::constGlobalData::MODE_INPUT),WS_CLIPCHILDREN|WS_VISIBLE|WS_OVERLAPPEDWINDOW,re[X],re[Y],re[WIDTH],re[HEIGHT],NULL,LoadMenu(hInstance,h::constGlobalData::MAINMENU),hInstance,NULL),WM_SETICON,ICON_BIG,(LPARAM)LoadIcon(hInstance,h::constGlobalData::ICON_NAME));
+    
     while(GetMessage(&msg,NULL,0,0)){
         TranslateMessage(&msg);
         DispatchMessage(&msg);

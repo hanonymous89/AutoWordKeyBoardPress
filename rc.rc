@@ -3,11 +3,11 @@ WAICON ICON "wa.ico"
 HELPPAGE TEXT "a.txt"
 MAINMENU MENU{
     POPUP "File(&F)"{
-        MENUITEM "FIle Open",FILEOPEN
-        MENUITEM "File Save",FILESAVE
+        MENUITEM "FIle Open(&O)",FILEOPEN
+        MENUITEM "File Save(&S)",FILESAVE
     }
-    POPUP "Tool(&T)"{
-        MENUITEM "New Window",NEWWINDOW
+    POPUP "Setting(&S)"{
+        MENUITEM "Open setting window(&O)",OPENSETTING
     }
     POPUP "Help(&H)"{
         MENUITEM "Show Help(&S)",SHOWHELP
