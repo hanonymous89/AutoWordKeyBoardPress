@@ -413,7 +413,10 @@ namespace h{
         winc.lpszClassName=name;
         return RegisterClass(&winc);
     }
-
+    struct scrollData{
+        int start,end,now;
+        bool is_move;
+    };
 };
 BOOL CALLBACK addGlobalHwndsChild(HWND hwnd,LPARAM lp){
     h::global::hwnds.push_back(hwnd);
@@ -424,33 +427,39 @@ LRESULT CALLBACK scrollProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     HDC hdc;
     RECT rect;
     HBRUSH defb,colorb;
-    static int start=0,end=255,now=0;
-    static bool is_move=false;
+    // static int start=0,end=255,now=0;
+    // static bool is_move=false;
+    static std::unordered_map<HWND,h::scrollData> each;
     switch(msg){
+        case WM_DESTROY:
+        each.clear();
+        break;
+        case WM_CREATE:
+        each[hwnd];
+        break;
         case WM_PAINT:
-
         GetClientRect(hwnd,&rect);
         hdc=BeginPaint(hwnd,&ps);
         colorb=CreateSolidBrush(RGB(0,255,0));
         defb=(HBRUSH)SelectObject(hdc,colorb);
-        Rectangle(hdc,now,0,now+10,rect.bottom);
+        Rectangle(hdc,each[hwnd].now,0,each[hwnd].now+10,rect.bottom);
         FrameRect(hdc,&rect,colorb);
-        TextOut(hdc,now,rect.bottom/2,h::cast::toString(now/(rect.right/end)).c_str(),h::cast::toString(now/(rect.right/end)).size());
+        TextOut(hdc,each[hwnd].now,rect.bottom/2,h::cast::toString(each[hwnd].now/(rect.right/each[hwnd].end)).c_str(),h::cast::toString(each[hwnd].now/(rect.right/each[hwnd].end)).size());
         SelectObject(hdc,defb);
         DeleteObject(colorb);
         EndPaint(hwnd,&ps);
         break;
         case WM_LBUTTONDOWN:
-        is_move=true;
+        each[hwnd].is_move=true;
         break;
         case WM_LBUTTONUP:
-        is_move=false;
+        each[hwnd].is_move=false;
         break;
         case WM_MOUSEMOVE:
-        if(!is_move){
+        if(!each[hwnd].is_move){
             break;
         }
-        now=MAKEPOINTS(lp).x;
+        each[hwnd].now=MAKEPOINTS(lp).x;
         InvalidateRect(hwnd,NULL,TRUE);
         UpdateWindow(hwnd);
         break;
@@ -458,10 +467,14 @@ LRESULT CALLBACK scrollProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
             switch(wp){
                 case h::constGlobalData::ALPHA_GET:
                 GetWindowRect(hwnd,&rect);
-                return now/(rect.right/end);
-                // case h::constGlobalData::ALPHA_SET:
-                // now=(int)lp*(rect.right/end);
-                // break;
+                return each[hwnd].now/(rect.right/each[hwnd].end);
+                case h::constGlobalData::ALPHA_SET:
+                each[hwnd].start=((struct h::scrollData*)lp)->start;
+                each[hwnd].end=((struct h::scrollData*)lp)->end;
+                each[hwnd].now=((struct h::scrollData*)lp)->now;
+                each[hwnd].is_move=((struct h::scrollData*)lp)->is_move;
+                
+                break;
             }
         break;
     }
@@ -480,6 +493,10 @@ LRESULT CALLBACK settingProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         case WM_CREATE:
         GetClientRect(hwnd,&rect);
         alpha=CreateWindowEx(WS_EX_TOPMOST,TEXT("SCROLL"),TEXT(""),WS_CHILD|WS_VISIBLE|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,0,0,rect.right/2,rect.bottom/5,hwnd,NULL,LPCREATESTRUCT(lp)->hInstance,NULL);
+       {
+            h::scrollData data{0,255,0,false};
+            SendMessage(alpha,WM_COMMAND,h::constGlobalData::ALPHA_SET,(LPARAM)&data);
+        }
         // SendMessage(alpha,WM_COMMAND,h::constGlobalData::ALPHA_SET,h::StrToInt(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_ALPHA),1)[0]);
         h::global::hwnds.clear();
         EnumChildWindows(hwnd,addGlobalHwndsChild,0);
