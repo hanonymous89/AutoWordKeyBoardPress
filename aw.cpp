@@ -11,6 +11,11 @@
 #include <cmath>
 #include "rc.h"
 namespace h{
+        template <class T>
+        struct RGB{
+            static constexpr int R=0,G=R+1,B=G+1;
+            T rgb[3];
+        };  
         namespace constGlobalData{
             //namespace ...{}
             constexpr auto ENTER="\n";
@@ -325,11 +330,7 @@ namespace h{
             return *this;
         }
     };
-    template <class T>
-    struct RGB{
-        static constexpr int R=0,G=R+1,B=G+1;
-        T rgb[3];
-    };
+
     class RGBManager{
         private:
         RGB<int> rgb;
@@ -414,7 +415,7 @@ namespace h{
         return RegisterClass(&winc);
     }
     struct scrollData{
-        int start,end,now;
+        int start,end,now,nowc;
         bool is_move;
     };
 };
@@ -422,6 +423,7 @@ BOOL CALLBACK addGlobalHwndsChild(HWND hwnd,LPARAM lp){
     h::global::hwnds.push_back(hwnd);
     return TRUE;
 }
+
 LRESULT CALLBACK scrollProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     PAINTSTRUCT ps;
     HDC hdc;
@@ -438,13 +440,18 @@ LRESULT CALLBACK scrollProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         each[hwnd];
         break;
         case WM_PAINT:
+        InvalidateRect(hwnd,NULL,TRUE);
         GetClientRect(hwnd,&rect);
         hdc=BeginPaint(hwnd,&ps);
-        colorb=CreateSolidBrush(RGB(0,255,0));
+        colorb=CreateSolidBrush(RGB(0,255,0));//(255*3)/end
         defb=(HBRUSH)SelectObject(hdc,colorb);
         Rectangle(hdc,each[hwnd].now,0,each[hwnd].now+10,rect.bottom);
         FrameRect(hdc,&rect,colorb);
-        TextOut(hdc,each[hwnd].now,rect.bottom/2,h::cast::toString(each[hwnd].now/(rect.right/each[hwnd].end)).c_str(),h::cast::toString(each[hwnd].now/(rect.right/each[hwnd].end)).size());
+        {
+        each[hwnd].nowc=each[hwnd].now/(static_cast<double>(rect.right)/each[hwnd].end);
+        std::string text=(h::getWindowStr(hwnd)+h::cast::toString(each[hwnd].nowc));
+        TextOut(hdc,each[hwnd].now,rect.bottom/2,text.c_str(),text.size());
+        }
         SelectObject(hdc,defb);
         DeleteObject(colorb);
         EndPaint(hwnd,&ps);
@@ -466,23 +473,41 @@ LRESULT CALLBACK scrollProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         case WM_COMMAND:
             switch(wp){
                 case h::constGlobalData::ALPHA_GET:
-                GetWindowRect(hwnd,&rect);
-                return each[hwnd].now/(rect.right/each[hwnd].end);
+                return each[hwnd].nowc;
                 case h::constGlobalData::ALPHA_SET:
                 each[hwnd].start=((struct h::scrollData*)lp)->start;
                 each[hwnd].end=((struct h::scrollData*)lp)->end;
                 each[hwnd].now=((struct h::scrollData*)lp)->now;
                 each[hwnd].is_move=((struct h::scrollData*)lp)->is_move;
-                
+                each[hwnd].nowc=((struct h::scrollData*)lp)->nowc;
                 break;
             }
         break;
     }
     return DefWindowProc(hwnd,msg,wp,lp);
 }
+WNDPROC hookrgb;
+LRESULT CALLBACK rgbProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
+    RECT rect,re;
+    switch(msg){
+        case WM_PAINT:
+        GetClientRect(GetParent(hwnd),&rect);
+        GetClientRect(hwnd,&re);
+        rect.left=re.right;
+        rect.top=re.bottom;
+        InvalidateRect(GetParent(hwnd),&rect,FALSE);
+        UpdateWindow(GetParent(hwnd));
+        // InvalidateRect(hwnd,NULL,TRUE);
+        break;
+    }
+    return CallWindowProc(hookrgb,hwnd,msg,wp,lp);
+}
 LRESULT CALLBACK settingProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
-    static HWND alpha;
+    static HWND alpha,r,g,b;//ffffff 16777215 
     static h::ResizeManager rm;
+    PAINTSTRUCT ps;
+    HDC hdc;
+    HBRUSH defb,colorb;
     RECT rect;
     switch(msg){
         case WM_DESTROY:
@@ -492,19 +517,41 @@ LRESULT CALLBACK settingProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         break;
         case WM_CREATE:
         GetClientRect(hwnd,&rect);
-        alpha=CreateWindowEx(WS_EX_TOPMOST,TEXT("SCROLL"),TEXT(""),WS_CHILD|WS_VISIBLE|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,0,0,rect.right/2,rect.bottom/5,hwnd,NULL,LPCREATESTRUCT(lp)->hInstance,NULL);
-       {
-            h::scrollData data{0,255,0,false};
+        alpha=CreateWindowEx(WS_EX_TOPMOST,TEXT("SCROLL"),TEXT("Alpha"),WS_CHILD|WS_VISIBLE|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,0,0,rect.right/2,rect.bottom/5,hwnd,NULL,LPCREATESTRUCT(lp)->hInstance,NULL);
+        r=CreateWindowEx(WS_EX_TOPMOST,TEXT("SCROLL"),TEXT("r"),WS_CHILD|WS_VISIBLE|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,0,rect.bottom/5,rect.right/2,rect.bottom/5,hwnd,NULL,LPCREATESTRUCT(lp)->hInstance,NULL);
+        g=CreateWindowEx(WS_EX_TOPMOST,TEXT("SCROLL"),TEXT("g"),WS_CHILD|WS_VISIBLE|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,0,(rect.bottom/5)*2,rect.right/2,rect.bottom/5,hwnd,NULL,LPCREATESTRUCT(lp)->hInstance,NULL);
+        b=CreateWindowEx(WS_EX_TOPMOST,TEXT("SCROLL"),TEXT("b"),WS_CHILD|WS_VISIBLE|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,0,(rect.bottom/5)*3,rect.right/2,rect.bottom/5,hwnd,NULL,LPCREATESTRUCT(lp)->hInstance,NULL);
+        
+        {
+            h::scrollData data{0,255,0,0,false};
             SendMessage(alpha,WM_COMMAND,h::constGlobalData::ALPHA_SET,(LPARAM)&data);
+            SendMessage(r,WM_COMMAND,h::constGlobalData::ALPHA_SET,(LPARAM)&data);
+            SendMessage(g,WM_COMMAND,h::constGlobalData::ALPHA_SET,(LPARAM)&data);
+            SendMessage(b,WM_COMMAND,h::constGlobalData::ALPHA_SET,(LPARAM)&data);
+            
+            
         }
+        hookrgb=(WNDPROC)SetWindowLong(r,GWL_WNDPROC,(LONG)rgbProc);
+        SetWindowLong(g,GWL_WNDPROC,(LONG)rgbProc);
+        SetWindowLong(b,GWL_WNDPROC,(LONG)rgbProc);
         // SendMessage(alpha,WM_COMMAND,h::constGlobalData::ALPHA_SET,h::StrToInt(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_ALPHA),1)[0]);
         h::global::hwnds.clear();
         EnumChildWindows(hwnd,addGlobalHwndsChild,0);
         rm=std::move(h::ResizeManager(hwnd,h::global::hwnds));
         break;
+        case WM_PAINT:
+        GetClientRect(hwnd,&rect);
+        hdc=BeginPaint(hwnd,&ps);
+        colorb=CreateSolidBrush(RGB(SendMessage(r,WM_COMMAND,h::constGlobalData::ALPHA_GET,0),SendMessage(g,WM_COMMAND,h::constGlobalData::ALPHA_GET,0),SendMessage(b,WM_COMMAND,h::constGlobalData::ALPHA_GET,0)));
+        defb=(HBRUSH)SelectObject(hdc,colorb);
+        FrameRect(hdc,&rect,colorb);
+        SelectObject(hdc,defb);
+        DeleteObject(colorb);
+        EndPaint(hwnd,&ps);
+        break;
         case WM_SIZE:
         rm.resize();
-        break;
+        break;//既定のプロージャーをのっとって機能追加する
     }
     return DefWindowProc(hwnd,msg,wp,lp);
 }
