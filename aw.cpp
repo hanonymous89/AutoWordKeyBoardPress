@@ -30,10 +30,13 @@ namespace h{
             constexpr auto BTN_SET=1;
             constexpr auto SECTION_SHOW="SHOW";
             constexpr auto KEY_ALPHA="alpha";
-            constexpr auto KEY_COLOR="color";
+            constexpr auto KEY_BK_COLOR="bk";
+            constexpr auto KEY_BORDER_COLOR="border";
+            
         };
         namespace global{
             std::vector<HWND> hwnds;
+            std::unordered_map<HWND,WNDPROC> borderHookList;
             HBRUSH borderBrush,
                    bkBrush;
         };
@@ -405,7 +408,7 @@ namespace h{
     struct btnData{
         bool flag;
         int msg;
-        COLORREF color;
+        COLORREF color,push;
     };
 };
 BOOL CALLBACK addGlobalHwndsChild(HWND hwnd,LPARAM lp){
@@ -493,7 +496,7 @@ LRESULT CALLBACK settingProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         case WM_DESTROY:
             h::INI(h::constGlobalData::SETTING_FILE)
             .editValue(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_ALPHA,h::cast::toString((int)SendMessage(alpha,WM_COMMAND,h::constGlobalData::NUM_GET,0)))
-            .editValue(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_COLOR,h::vecToString(h::cast::toString(SendMessage(r,WM_COMMAND,h::constGlobalData::NUM_GET,0),SendMessage(g,WM_COMMAND,h::constGlobalData::NUM_GET,0),SendMessage(b,WM_COMMAND,h::constGlobalData::NUM_GET,0))," "))
+            // .editValue(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_COLOR,h::vecToString(h::cast::toString(SendMessage(r,WM_COMMAND,h::constGlobalData::NUM_GET,0),SendMessage(g,WM_COMMAND,h::constGlobalData::NUM_GET,0),SendMessage(b,WM_COMMAND,h::constGlobalData::NUM_GET,0))," "))
             .save();
         break;
         case WM_CREATE:
@@ -563,12 +566,18 @@ LRESULT CALLBACK btnProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         case WM_PAINT:
         GetClientRect(hwnd,&rect);
         hdc=BeginPaint(hwnd,&ps);
-        SetTextColor(hdc,data[hwnd].color^(0xffffff*!data[hwnd].flag));
-        SetBkColor(hdc,data[hwnd].color^(0xffffff*data[hwnd].flag));
-        colorb=CreateSolidBrush(data[hwnd].color^(0xffffff*data[hwnd].flag));
+        // SetTextColor(hdc,data[hwnd].color^(0xffffff*!data[hwnd].flag));
+        // SetBkColor(hdc,data[hwnd].color^(0xffffff*data[hwnd].flag));
+        // colorb=CreateSolidBrush(data[hwnd].color^(0xffffff*data[hwnd].flag));
+        SetTextColor(hdc,h::customBool(data[hwnd].flag,data[hwnd].color,data[hwnd].push));
+        SetBkColor(hdc,h::customBool(data[hwnd].flag,data[hwnd].push,data[hwnd].color));
+        colorb=CreateSolidBrush(h::customBool(data[hwnd].flag,data[hwnd].push,data[hwnd].color));
         defb=HBRUSH(SelectObject(hdc,colorb));
         Rectangle(hdc,0,0,rect.right,rect.bottom);
         DrawText(hdc,h::getWindowStr(hwnd).c_str(),-1,&rect,DT_CENTER|DT_WORDBREAK|DT_VCENTER);
+        DeleteObject(colorb);
+        colorb=CreateSolidBrush(h::customBool(data[hwnd].flag,data[hwnd].color,data[hwnd].push));
+        FrameRect(hdc,&rect,colorb);//h::global::hbursh
         SelectObject(hdc,defb);
         DeleteObject(colorb);
         EndPaint(hwnd,&ps);
@@ -578,6 +587,8 @@ LRESULT CALLBACK btnProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
             case h::constGlobalData::BTN_SET:
             data[hwnd].flag=((struct h::btnData*)lp)->flag;
             data[hwnd].color=((struct h::btnData*)lp)->color;
+            data[hwnd].push=((struct h::btnData*)lp)->push;
+            
             data[hwnd].msg=((struct h::btnData*)lp)->msg;
             break;
         }
@@ -585,7 +596,26 @@ LRESULT CALLBACK btnProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     }
     return DefWindowProc(hwnd,msg,wp,lp);
 }
+LRESULT CALLBACK borderProcHook(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
+    PAINTSTRUCT ps;
+    HDC hdc;
+    RECT rect;
+    switch(msg){
+        case WM_PAINT:
+        GetClientRect(hwnd,&rect);
+        hdc=BeginPaint(hwnd,&ps);
+        FrameRect(hdc,&rect,h::global::borderBrush);
+        EndPaint(hwnd,&ps);
+        break;
+    }
+    return CallWindowProc(h::global::borderHookList[hwnd],hwnd,msg,wp,lp);
+}
+namespace h{
+    void addBorder(HWND hwnd){
+    h::global::borderHookList[hwnd]=(WNDPROC)SetWindowLong(hwnd,GWL_WNDPROC,(LONG)borderProcHook);
+    }
 
+}
 LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     constexpr int MSG1=1,
                   MSG2=MSG1+1,
@@ -600,11 +630,14 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     static OPENFILENAME ofn{0};
     static TCHAR path[MAX_PATH];
     static h::ResizeManager rm;
+    PAINTSTRUCT ps;
+    HDC hdc;
     std::string str;
     RECT rect;
     switch(msg){
         case WM_DESTROY:
             DeleteObject(h::global::borderBrush);
+            DeleteObject(h::global::bkBrush);
             for(int i=SendMessage(list,LB_GETCOUNT,0,0)-1;i>=0;--i){
                 str+=h::getListStr(list,i)+CELEND;
             }
@@ -620,7 +653,7 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         case WM_CTLCOLOREDIT:
         SetTextColor(HDC(wp),RGB(0,255,0));
         SetBkMode(HDC(wp),RGB(0,0,0));
-        return (LONG)h::global::borderBrush;
+        return (LONG)h::global::bkBrush;
         break;
         case WM_CREATE:
             if(!std::filesystem::exists(h::constGlobalData::SETTING_FILE)){
@@ -629,14 +662,15 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
             SetLayeredWindowAttributes(hwnd,RGB(0,1,0),h::StrToInt(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_ALPHA),1)[0],LWA_ALPHA);
             GetClientRect(hwnd,&rect);
             {
-                h::btnData btnData{false,MSG1,RGB(0,0,0)};
+                h::btnData btnData{false,MSG1,RGB(0,0,0),RGB(0,255,0)};
                 SendMessage(CreateWindow(TEXT("SIMPLEBTN"),TEXT("Add"),BS_PUSHBUTTON|WS_VISIBLE|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS|BS_MULTILINE,(rect.right/10)*8,0,(rect.right/10)*2,rect.bottom/2,hwnd,(HMENU)MSG1,LPCREATESTRUCT(lp)->hInstance,NULL),WM_COMMAND,h::constGlobalData::BTN_SET,(LPARAM)&btnData);
                 btnData.msg=MSG3;
                 SendMessage(CreateWindow(TEXT("SIMPLEBTN"),TEXT("Sub"),BS_PUSHBUTTON|WS_VISIBLE|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS|BS_MULTILINE,(rect.right/10)*8,rect.bottom/2,(rect.right/10)*2,rect.bottom/2,hwnd,(HMENU)MSG3,LPCREATESTRUCT(lp)->hInstance,NULL),WM_COMMAND,h::constGlobalData::BTN_SET,(LPARAM)&btnData);
             }
             list=CreateWindow(TEXT("LISTBOX"),TEXT(KEY_WORDLIST),WS_HSCROLL|WS_VSCROLL|LBS_NOTIFY |WS_VISIBLE|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,0,0,(rect.right/10)*8,rect.bottom/2,hwnd,(HMENU)MSG2,(LPCREATESTRUCT(lp))->hInstance,NULL);
             edit=CreateWindow(TEXT("EDIT"),TEXT(""),ES_AUTOHSCROLL|ES_AUTOVSCROLL|WS_HSCROLL|WS_VSCROLL|WS_VISIBLE|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS|ES_MULTILINE|ES_WANTRETURN,0,rect.bottom/2,(rect.right/10)*8,rect.bottom/2,hwnd,NULL,LPCREATESTRUCT(lp)->hInstance,NULL);
-            
+            h::addBorder(edit);
+            h::addBorder(list);
             ofn.lStructSize=sizeof(OPENFILENAME);
             ofn.hwndOwner=hwnd;
             ofn.lpstrFilter=TEXT("All files {*.*}\0*.*\0\0");
@@ -712,8 +746,10 @@ int WINAPI WinMain(HINSTANCE hInstance,HINSTANCE hPrevInstance,PSTR lpCmdLine,in
     h::baseStyle(btnProc,"SIMPLEBTN");
     auto re=h::StrToInt(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(h::constGlobalData::SECTION_POS,MAINWINDOWNAME),4);
     SendMessage(CreateWindowEx(WS_EX_TOPMOST|WS_EX_LAYERED,TEXT(MAIN_WINDOW_CLASS),TEXT(h::constGlobalData::MODE_INPUT),WS_CLIPCHILDREN|WS_VISIBLE|WS_OVERLAPPEDWINDOW,re[X],re[Y],re[WIDTH],re[HEIGHT],NULL,LoadMenu(hInstance,h::constGlobalData::MAINMENU),hInstance,NULL),WM_SETICON,ICON_BIG,(LPARAM)LoadIcon(hInstance,h::constGlobalData::ICON_NAME));
-    re=h::StrToInt(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_COLOR),3);
+    re=h::StrToInt(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_BORDER_COLOR),3);
     h::global::borderBrush=CreateSolidBrush(RGB(re[0],re[1],re[2]));
+    re=h::StrToInt(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_BK_COLOR),3);
+    h::global::bkBrush=CreateSolidBrush(RGB(re[0],re[1],re[2]));
     while(GetMessage(&msg,NULL,0,0)){
         TranslateMessage(&msg);
         DispatchMessage(&msg);
