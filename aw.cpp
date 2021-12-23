@@ -17,20 +17,19 @@ namespace h{
             T rgb[3];
         };  
         namespace constGlobalData{
-            //namespace ...{}
             constexpr auto ENTER="\n";
             constexpr auto SETTING_FILE="setting.ini";
             constexpr auto ICON_NAME=TEXT("WAICON");
             constexpr auto SECTION_POS="POS";
             #define  MAINWINDOWNAME "Mode"
-            //constexpr auto mainwindowname....
             constexpr auto MODE_INPUT=MAINWINDOWNAME ":Input";
             constexpr auto MODE_OUTPUT=MAINWINDOWNAME ":Output";
             constexpr auto MAINMENU=TEXT("MAINMENU");
-            constexpr auto ALPHA_GET=1;
-            constexpr auto ALPHA_SET=2;
+            constexpr auto NUM_GET=1;
+            constexpr auto NUM_SET=2;
             constexpr auto SECTION_SHOW="SHOW";
             constexpr auto KEY_ALPHA="alpha";
+            constexpr auto KEY_COLOR="color";
         };
         namespace global{
             std::vector<HWND> hwnds;
@@ -65,18 +64,11 @@ namespace h{
             toStringFor(vec,tuple);
             return vec;
         }
-        // template <class T> 
-        // auto toString(T &str){
-        //     std::vector<std::string> vec;
-        //     for(auto &obj:str){
-        //         vec.push_back(toString(obj));
-        //     }
-        //     return vec;
-        // }
+
     };
     template <class T>
     inline auto absSub(T left,T right){
-        return std::abs(left)-std::abs(right);//sub funcsion
+        return std::abs(left)-std::abs(right);
     }
     template <class T>
     inline auto fitNum(T num,T left,T right){
@@ -177,11 +169,11 @@ namespace h{
         GetWindowText(hwnd,text.get(),BUFSIZE);
         return std::string(text.get(),text.get()+BUFSIZE-1);
     }
-    inline auto getListStr(const HWND list,int num)noexcept(false){//
-        num=SendMessage(list,LB_GETTEXTLEN,num,0)+1;
-        std::unique_ptr<TCHAR> text(new TCHAR[num]);
-        SendMessage(list,LB_GETTEXT,num,(LPARAM)text.get());
-        return std::string(text.get(),text.get()+num-1);
+    inline auto getListStr(const HWND list,int id)noexcept(false){//
+        const int BUFSIZE=SendMessage(list,LB_GETTEXTLEN,id,0)+1;
+        std::unique_ptr<TCHAR> text(new TCHAR[BUFSIZE]);
+        SendMessage(list,LB_GETTEXT,id,(LPARAM)text.get());
+        return std::string(text.get(),text.get()+BUFSIZE-1);
     }
     enum modeOperator{
         EQUAL,
@@ -205,7 +197,7 @@ namespace h{
         return function(arguments...);
     }
     template <class getT>
-    class mapManager{//クロージャにする
+    class mapManager{
         public:
         template <class MapT>
         typename getT::mapped_type &get(MapT &map,std::vector<typename getT::key_type> keys){
@@ -346,12 +338,6 @@ namespace h{
                 static int i=0;
                 rgb.rgb[i]=obj;
             }
-            // for(auto &obj:rgb.rgb){//strtoint
-            //     std::smatch m{};
-            //     std::regex_search(str,m,std::regex(R"(\d+)"));
-            //     obj=std::stoi("0"+m[0].str());
-            //     str=m.suffix();
-            // }
             return *this;
         }
         inline auto &get(){
@@ -362,7 +348,6 @@ namespace h{
             for(auto &obj:rgb.rgb){
                 linkStr(re,obj,between);
             }
-            //linkstr("",rgb.rgb,between);
             return re;
         }
     };
@@ -377,10 +362,6 @@ namespace h{
             GetClientRect(hwnd,&rect);
             ratioX=rect.right;
             ratioY=rect.bottom;
-            // for(auto &hw:children){
-            //     GetClientRect(hw,&rect);
-            //     this->children.push_back({hw,rect});
-            // }
             WINDOWPLACEMENT pos;
             pos.length=sizeof(WINDOWPLACEMENT);
             for(auto &hw:children){
@@ -402,7 +383,7 @@ namespace h{
         }
     };
     inline auto baseStyle(WNDPROC wndproc,LPCSTR name){
-        /*static? i should make closure?*/WNDCLASS winc;
+        WNDCLASS winc;
         winc.style=CS_VREDRAW|CS_HREDRAW;
         winc.cbClsExtra=winc.cbWndExtra=0;
         winc.hInstance=(HINSTANCE)GetModuleHandle(0);
@@ -429,8 +410,6 @@ LRESULT CALLBACK scrollProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     HDC hdc;
     RECT rect;
     HBRUSH defb,colorb;
-    // static int start=0,end=255,now=0;
-    // static bool is_move=false;
     static std::unordered_map<HWND,h::scrollData> each;
     switch(msg){
         case WM_DESTROY:
@@ -440,7 +419,6 @@ LRESULT CALLBACK scrollProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         each[hwnd];
         break;
         case WM_PAINT:
-        InvalidateRect(hwnd,NULL,TRUE);
         GetClientRect(hwnd,&rect);
         hdc=BeginPaint(hwnd,&ps);
         colorb=CreateSolidBrush(RGB(0,255,0));//(255*3)/end
@@ -472,9 +450,9 @@ LRESULT CALLBACK scrollProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         break;
         case WM_COMMAND:
             switch(wp){
-                case h::constGlobalData::ALPHA_GET:
+                case h::constGlobalData::NUM_GET:
                 return each[hwnd].nowc;
-                case h::constGlobalData::ALPHA_SET:
+                case h::constGlobalData::NUM_SET:
                 each[hwnd].start=((struct h::scrollData*)lp)->start;
                 each[hwnd].end=((struct h::scrollData*)lp)->end;
                 each[hwnd].now=((struct h::scrollData*)lp)->now;
@@ -491,19 +469,13 @@ LRESULT CALLBACK rgbProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     RECT rect,re;
     switch(msg){
         case WM_PAINT:
-        GetClientRect(GetParent(hwnd),&rect);
-        GetClientRect(hwnd,&re);
-        rect.left=re.right;
-        rect.top=re.bottom;
-        InvalidateRect(GetParent(hwnd),&rect,FALSE);
-        UpdateWindow(GetParent(hwnd));
-        // InvalidateRect(hwnd,NULL,TRUE);
+        InvalidateRect(GetParent(hwnd),NULL,TRUE);
         break;
     }
     return CallWindowProc(hookrgb,hwnd,msg,wp,lp);
 }
 LRESULT CALLBACK settingProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
-    static HWND alpha,r,g,b;//ffffff 16777215 
+    static HWND alpha,r,g,b;
     static h::ResizeManager rm;
     PAINTSTRUCT ps;
     HDC hdc;
@@ -512,7 +484,8 @@ LRESULT CALLBACK settingProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     switch(msg){
         case WM_DESTROY:
             h::INI(h::constGlobalData::SETTING_FILE)
-            .editValue(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_ALPHA,h::cast::toString((int)SendMessage(alpha,WM_COMMAND,h::constGlobalData::ALPHA_GET,0)))
+            .editValue(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_ALPHA,h::cast::toString((int)SendMessage(alpha,WM_COMMAND,h::constGlobalData::NUM_GET,0)))
+            .editValue(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_COLOR,h::vecToString(h::cast::toString(SendMessage(r,WM_COMMAND,h::constGlobalData::NUM_GET,0),SendMessage(g,WM_COMMAND,h::constGlobalData::NUM_GET,0),SendMessage(b,WM_COMMAND,h::constGlobalData::NUM_GET,0))," "))
             .save();
         break;
         case WM_CREATE:
@@ -524,17 +497,17 @@ LRESULT CALLBACK settingProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         
         {
             h::scrollData data{0,255,0,0,false};
-            SendMessage(alpha,WM_COMMAND,h::constGlobalData::ALPHA_SET,(LPARAM)&data);
-            SendMessage(r,WM_COMMAND,h::constGlobalData::ALPHA_SET,(LPARAM)&data);
-            SendMessage(g,WM_COMMAND,h::constGlobalData::ALPHA_SET,(LPARAM)&data);
-            SendMessage(b,WM_COMMAND,h::constGlobalData::ALPHA_SET,(LPARAM)&data);
+            SendMessage(alpha,WM_COMMAND,h::constGlobalData::NUM_SET,(LPARAM)&data);
+            SendMessage(r,WM_COMMAND,h::constGlobalData::NUM_SET,(LPARAM)&data);
+            SendMessage(g,WM_COMMAND,h::constGlobalData::NUM_SET,(LPARAM)&data);
+            SendMessage(b,WM_COMMAND,h::constGlobalData::NUM_SET,(LPARAM)&data);
             
             
         }
         hookrgb=(WNDPROC)SetWindowLong(r,GWL_WNDPROC,(LONG)rgbProc);
         SetWindowLong(g,GWL_WNDPROC,(LONG)rgbProc);
         SetWindowLong(b,GWL_WNDPROC,(LONG)rgbProc);
-        // SendMessage(alpha,WM_COMMAND,h::constGlobalData::ALPHA_SET,h::StrToInt(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_ALPHA),1)[0]);
+        // SendMessage(alpha,WM_COMMAND,h::constGlobalData::,h::StrToInt(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_ALPHA),1)[0]);
         h::global::hwnds.clear();
         EnumChildWindows(hwnd,addGlobalHwndsChild,0);
         rm=std::move(h::ResizeManager(hwnd,h::global::hwnds));
@@ -542,7 +515,7 @@ LRESULT CALLBACK settingProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         case WM_PAINT:
         GetClientRect(hwnd,&rect);
         hdc=BeginPaint(hwnd,&ps);
-        colorb=CreateSolidBrush(RGB(SendMessage(r,WM_COMMAND,h::constGlobalData::ALPHA_GET,0),SendMessage(g,WM_COMMAND,h::constGlobalData::ALPHA_GET,0),SendMessage(b,WM_COMMAND,h::constGlobalData::ALPHA_GET,0)));
+        colorb=CreateSolidBrush(RGB(SendMessage(r,WM_COMMAND,h::constGlobalData::NUM_GET,0),SendMessage(g,WM_COMMAND,h::constGlobalData::NUM_GET,0),SendMessage(b,WM_COMMAND,h::constGlobalData::NUM_GET,0)));
         defb=(HBRUSH)SelectObject(hdc,colorb);
         FrameRect(hdc,&rect,colorb);
         SelectObject(hdc,defb);
@@ -551,7 +524,7 @@ LRESULT CALLBACK settingProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         break;
         case WM_SIZE:
         rm.resize();
-        break;//既定のプロージャーをのっとって機能追加する
+        break;
     }
     return DefWindowProc(hwnd,msg,wp,lp);
 }
@@ -577,7 +550,8 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
                 str+=h::getListStr(list,i)+CELEND;
             }
             GetWindowRect(hwnd,&rect);
-            h::INI(h::constGlobalData::SETTING_FILE).editValue(SECTION_STRING,KEY_WORDLIST,str)
+            h::INI(h::constGlobalData::SETTING_FILE)
+            .editValue(SECTION_STRING,KEY_WORDLIST,str)
             .editValue(h::constGlobalData::SECTION_POS,MAINWINDOWNAME,h::vecToString(h::cast::toString(rect.left,rect.top,rect.right-rect.left,rect.bottom-rect.top)," "))
             .save();
             PostQuitMessage(0);
@@ -655,7 +629,7 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
                     system(std::filesystem::absolute(HELPHTML).string().c_str());
                 break;
                 case OPENSETTING:
-                    CreateWindow(TEXT("SETTING"),TEXT("setting"),WS_VISIBLE|WS_OVERLAPPEDWINDOW,CW_USEDEFAULT,CW_USEDEFAULT,CW_USEDEFAULT,CW_USEDEFAULT,NULL,NULL,(HINSTANCE)GetModuleHandle(0),NULL);
+                    CreateWindow(TEXT("SETTING"),TEXT("setting"),WS_VISIBLE|WS_OVERLAPPEDWINDOW|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,CW_USEDEFAULT,CW_USEDEFAULT,CW_USEDEFAULT,CW_USEDEFAULT,NULL,NULL,(HINSTANCE)GetModuleHandle(0),NULL);
                 break;
             }
         break;
