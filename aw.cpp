@@ -36,7 +36,6 @@ namespace h{
         };
         namespace global{
             std::vector<HWND> hwnds;
-            std::unordered_map<HWND,WNDPROC> borderHookList;
             HBRUSH borderBrush,
                    bkBrush;
         };
@@ -550,7 +549,6 @@ LRESULT CALLBACK btnProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         data[hwnd];
         break;
         case WM_LBUTTONDOWN:
-        // data[hwnd]=!data[hwnd];radioproc
         data[hwnd].flag=true;
         InvalidateRect(hwnd,NULL,TRUE);
         UpdateWindow(hwnd);
@@ -561,14 +559,10 @@ LRESULT CALLBACK btnProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         UpdateWindow(hwnd);
         if(GetParent(hwnd)==NULL)break;
         SendMessage(GetParent(hwnd),WM_COMMAND,MAKEWPARAM(data[hwnd].msg,data[hwnd].msg),0);
-        // SendMessage(GetParent(hwnd));
         break;
         case WM_PAINT:
         GetClientRect(hwnd,&rect);
         hdc=BeginPaint(hwnd,&ps);
-        // SetTextColor(hdc,data[hwnd].color^(0xffffff*!data[hwnd].flag));
-        // SetBkColor(hdc,data[hwnd].color^(0xffffff*data[hwnd].flag));
-        // colorb=CreateSolidBrush(data[hwnd].color^(0xffffff*data[hwnd].flag));
         SetTextColor(hdc,h::customBool(data[hwnd].flag,data[hwnd].color,data[hwnd].push));
         SetBkColor(hdc,h::customBool(data[hwnd].flag,data[hwnd].push,data[hwnd].color));
         colorb=CreateSolidBrush(h::customBool(data[hwnd].flag,data[hwnd].push,data[hwnd].color));
@@ -577,7 +571,7 @@ LRESULT CALLBACK btnProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         DrawText(hdc,h::getWindowStr(hwnd).c_str(),-1,&rect,DT_CENTER|DT_WORDBREAK|DT_VCENTER);
         DeleteObject(colorb);
         colorb=CreateSolidBrush(h::customBool(data[hwnd].flag,data[hwnd].color,data[hwnd].push));
-        FrameRect(hdc,&rect,colorb);//h::global::hbursh
+        FrameRect(hdc,&rect,colorb);
         SelectObject(hdc,defb);
         DeleteObject(colorb);
         EndPaint(hwnd,&ps);
@@ -596,26 +590,7 @@ LRESULT CALLBACK btnProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     }
     return DefWindowProc(hwnd,msg,wp,lp);
 }
-LRESULT CALLBACK borderProcHook(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
-    PAINTSTRUCT ps;
-    HDC hdc;
-    RECT rect;
-    switch(msg){
-        case WM_PAINT:
-        GetClientRect(hwnd,&rect);
-        hdc=BeginPaint(hwnd,&ps);
-        FrameRect(hdc,&rect,h::global::borderBrush);
-        EndPaint(hwnd,&ps);
-        break;
-    }
-    return CallWindowProc(h::global::borderHookList[hwnd],hwnd,msg,wp,lp);
-}
-namespace h{
-    void addBorder(HWND hwnd){
-    h::global::borderHookList[hwnd]=(WNDPROC)SetWindowLong(hwnd,GWL_WNDPROC,(LONG)borderProcHook);
-    }
 
-}
 LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     constexpr int MSG1=1,
                   MSG2=MSG1+1,
@@ -651,8 +626,13 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         break;
         case WM_CTLCOLORLISTBOX:
         case WM_CTLCOLOREDIT:
-        SetTextColor(HDC(wp),RGB(0,255,0));
-        SetBkMode(HDC(wp),RGB(0,0,0));
+        {   
+            
+            auto rgb_f=h::StrToInt(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_BORDER_COLOR),3);
+            SetTextColor(HDC(wp),RGB(rgb_f[0],rgb_f[1],rgb_f[2]));
+            rgb_f=h::StrToInt(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_BK_COLOR),3);
+            SetBkColor(HDC(wp),RGB(rgb_f[0],rgb_f[1],rgb_f[2]));
+        }
         return (LONG)h::global::bkBrush;
         break;
         case WM_CREATE:
@@ -669,8 +649,6 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
             }
             list=CreateWindow(TEXT("LISTBOX"),TEXT(KEY_WORDLIST),WS_HSCROLL|WS_VSCROLL|LBS_NOTIFY |WS_VISIBLE|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,0,0,(rect.right/10)*8,rect.bottom/2,hwnd,(HMENU)MSG2,(LPCREATESTRUCT(lp))->hInstance,NULL);
             edit=CreateWindow(TEXT("EDIT"),TEXT(""),ES_AUTOHSCROLL|ES_AUTOVSCROLL|WS_HSCROLL|WS_VSCROLL|WS_VISIBLE|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS|ES_MULTILINE|ES_WANTRETURN,0,rect.bottom/2,(rect.right/10)*8,rect.bottom/2,hwnd,NULL,LPCREATESTRUCT(lp)->hInstance,NULL);
-            h::addBorder(edit);
-            h::addBorder(list);
             ofn.lStructSize=sizeof(OPENFILENAME);
             ofn.hwndOwner=hwnd;
             ofn.lpstrFilter=TEXT("All files {*.*}\0*.*\0\0");
