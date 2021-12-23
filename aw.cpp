@@ -27,12 +27,15 @@ namespace h{
             constexpr auto MAINMENU=TEXT("MAINMENU");
             constexpr auto NUM_GET=1;
             constexpr auto NUM_SET=2;
+            constexpr auto BTN_SET=1;
             constexpr auto SECTION_SHOW="SHOW";
             constexpr auto KEY_ALPHA="alpha";
             constexpr auto KEY_COLOR="color";
         };
         namespace global{
             std::vector<HWND> hwnds;
+            HBRUSH borderBrush,
+                   bkBrush;
         };
         namespace cast{
         template <class T>
@@ -169,7 +172,7 @@ namespace h{
         GetWindowText(hwnd,text.get(),BUFSIZE);
         return std::string(text.get(),text.get()+BUFSIZE-1);
     }
-    inline auto getListStr(const HWND list,int id)noexcept(false){//
+    inline auto getListStr(const HWND list,const int id)noexcept(false){//
         const int BUFSIZE=SendMessage(list,LB_GETTEXTLEN,id,0)+1;
         std::unique_ptr<TCHAR> text(new TCHAR[BUFSIZE]);
         SendMessage(list,LB_GETTEXT,id,(LPARAM)text.get());
@@ -399,6 +402,11 @@ namespace h{
         int start,end,now,nowc;
         bool is_move;
     };
+    struct btnData{
+        bool flag;
+        int msg;
+        COLORREF color;
+    };
 };
 BOOL CALLBACK addGlobalHwndsChild(HWND hwnd,LPARAM lp){
     h::global::hwnds.push_back(hwnd);
@@ -528,6 +536,56 @@ LRESULT CALLBACK settingProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     }
     return DefWindowProc(hwnd,msg,wp,lp);
 }
+LRESULT CALLBACK btnProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
+    PAINTSTRUCT ps;
+    HDC hdc;
+    RECT rect;
+    HBRUSH defb,colorb;
+    static std::unordered_map<HWND,h::btnData> data;
+    switch(msg){
+        case WM_CREATE:
+        data[hwnd];
+        break;
+        case WM_LBUTTONDOWN:
+        // data[hwnd]=!data[hwnd];radioproc
+        data[hwnd].flag=true;
+        InvalidateRect(hwnd,NULL,TRUE);
+        UpdateWindow(hwnd);
+        break;
+        case WM_LBUTTONUP:
+        data[hwnd].flag=false;
+        InvalidateRect(hwnd,NULL,TRUE);
+        UpdateWindow(hwnd);
+        if(GetParent(hwnd)==NULL)break;
+        SendMessage(GetParent(hwnd),WM_COMMAND,MAKEWPARAM(data[hwnd].msg,data[hwnd].msg),0);
+        // SendMessage(GetParent(hwnd));
+        break;
+        case WM_PAINT:
+        GetClientRect(hwnd,&rect);
+        hdc=BeginPaint(hwnd,&ps);
+        SetTextColor(hdc,data[hwnd].color^(0xffffff*!data[hwnd].flag));
+        SetBkColor(hdc,data[hwnd].color^(0xffffff*data[hwnd].flag));
+        colorb=CreateSolidBrush(data[hwnd].color^(0xffffff*data[hwnd].flag));
+        defb=HBRUSH(SelectObject(hdc,colorb));
+        Rectangle(hdc,0,0,rect.right,rect.bottom);
+        DrawText(hdc,h::getWindowStr(hwnd).c_str(),-1,&rect,DT_CENTER|DT_WORDBREAK|DT_VCENTER);
+        SelectObject(hdc,defb);
+        DeleteObject(colorb);
+        EndPaint(hwnd,&ps);
+        break;
+        case WM_COMMAND:
+        switch(wp){
+            case h::constGlobalData::BTN_SET:
+            data[hwnd].flag=((struct h::btnData*)lp)->flag;
+            data[hwnd].color=((struct h::btnData*)lp)->color;
+            data[hwnd].msg=((struct h::btnData*)lp)->msg;
+            break;
+        }
+        break;
+    }
+    return DefWindowProc(hwnd,msg,wp,lp);
+}
+
 LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     constexpr int MSG1=1,
                   MSG2=MSG1+1,
@@ -546,6 +604,7 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     RECT rect;
     switch(msg){
         case WM_DESTROY:
+            DeleteObject(h::global::borderBrush);
             for(int i=SendMessage(list,LB_GETCOUNT,0,0)-1;i>=0;--i){
                 str+=h::getListStr(list,i)+CELEND;
             }
@@ -557,15 +616,27 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
             PostQuitMessage(0);
             
         break;
+        case WM_CTLCOLORLISTBOX:
+        case WM_CTLCOLOREDIT:
+        SetTextColor(HDC(wp),RGB(0,255,0));
+        SetBkMode(HDC(wp),RGB(0,0,0));
+        return (LONG)h::global::borderBrush;
+        break;
         case WM_CREATE:
+            if(!std::filesystem::exists(h::constGlobalData::SETTING_FILE)){
+                std::ofstream(h::constGlobalData::SETTING_FILE);
+            }
             SetLayeredWindowAttributes(hwnd,RGB(0,1,0),h::StrToInt(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_ALPHA),1)[0],LWA_ALPHA);
             GetClientRect(hwnd,&rect);
-            SendMessage(CreateWindow(TEXT("BUTTON"),TEXT("Add"),WS_VISIBLE|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS|BS_MULTILINE,(rect.right/10)*8,0,(rect.right/10)*2,rect.bottom/2,hwnd,(HMENU)MSG1,LPCREATESTRUCT(lp)->hInstance,NULL),WM_SETICON,ICON_BIG,(LPARAM)LoadIcon(LPCREATESTRUCT(lp)->hInstance,h::constGlobalData::ICON_NAME));
-            SendMessage(CreateWindow(TEXT("BUTTON"),TEXT("Sub"),WS_VISIBLE|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS|BS_MULTILINE,(rect.right/10)*8,rect.bottom/2,(rect.right/10)*2,rect.bottom/2,hwnd,(HMENU)MSG3,LPCREATESTRUCT(lp)->hInstance,NULL),WM_SETICON,ICON_BIG,(LPARAM)LoadIcon(LPCREATESTRUCT(lp)->hInstance,h::constGlobalData::ICON_NAME));
+            {
+                h::btnData btnData{false,MSG1,RGB(0,0,0)};
+                SendMessage(CreateWindow(TEXT("SIMPLEBTN"),TEXT("Add"),BS_PUSHBUTTON|WS_VISIBLE|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS|BS_MULTILINE,(rect.right/10)*8,0,(rect.right/10)*2,rect.bottom/2,hwnd,(HMENU)MSG1,LPCREATESTRUCT(lp)->hInstance,NULL),WM_COMMAND,h::constGlobalData::BTN_SET,(LPARAM)&btnData);
+                btnData.msg=MSG3;
+                SendMessage(CreateWindow(TEXT("SIMPLEBTN"),TEXT("Sub"),BS_PUSHBUTTON|WS_VISIBLE|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS|BS_MULTILINE,(rect.right/10)*8,rect.bottom/2,(rect.right/10)*2,rect.bottom/2,hwnd,(HMENU)MSG3,LPCREATESTRUCT(lp)->hInstance,NULL),WM_COMMAND,h::constGlobalData::BTN_SET,(LPARAM)&btnData);
+            }
             list=CreateWindow(TEXT("LISTBOX"),TEXT(KEY_WORDLIST),WS_HSCROLL|WS_VSCROLL|LBS_NOTIFY |WS_VISIBLE|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,0,0,(rect.right/10)*8,rect.bottom/2,hwnd,(HMENU)MSG2,(LPCREATESTRUCT(lp))->hInstance,NULL);
-            SendMessage(list,WM_SETICON,ICON_BIG,(LPARAM)LoadIcon(LPCREATESTRUCT(lp)->hInstance,h::constGlobalData::ICON_NAME));
             edit=CreateWindow(TEXT("EDIT"),TEXT(""),ES_AUTOHSCROLL|ES_AUTOVSCROLL|WS_HSCROLL|WS_VSCROLL|WS_VISIBLE|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS|ES_MULTILINE|ES_WANTRETURN,0,rect.bottom/2,(rect.right/10)*8,rect.bottom/2,hwnd,NULL,LPCREATESTRUCT(lp)->hInstance,NULL);
-            SendMessage(edit,WM_SETICON,ICON_BIG,(LPARAM)LoadIcon(LPCREATESTRUCT(lp)->hInstance,h::constGlobalData::ICON_NAME));
+            
             ofn.lStructSize=sizeof(OPENFILENAME);
             ofn.hwndOwner=hwnd;
             ofn.lpstrFilter=TEXT("All files {*.*}\0*.*\0\0");
@@ -573,16 +644,11 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
             ofn.lpstrFile=path;
             ofn.nMaxFile=MAX_PATH;
             ofn.Flags=OFN_NOVALIDATE;
-            if(!std::filesystem::exists(h::constGlobalData::SETTING_FILE)){
-                std::ofstream(h::constGlobalData::SETTING_FILE);
-            }
             for(auto word:h::split(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(SECTION_STRING,KEY_WORDLIST),CELEND)){
                 SendMessage(list,LB_ADDSTRING,0,(LPARAM)word.c_str());
             }
             EnumChildWindows(hwnd,addGlobalHwndsChild,0);
             rm=std::move(h::ResizeManager(hwnd,h::global::hwnds));
-            // MessageBox(hwnd,h::vecToString(h::cast::toString(m.right,c.right)).c_str(),0,0);
-            
         break;
         case WM_SIZE:
             rm.resize();
@@ -643,10 +709,11 @@ int WINAPI WinMain(HINSTANCE hInstance,HINSTANCE hPrevInstance,PSTR lpCmdLine,in
     h::baseStyle(WndProc,MAIN_WINDOW_CLASS);
     h::baseStyle(scrollProc,"SCROLL");
     h::baseStyle(settingProc,"SETTING");
-    
+    h::baseStyle(btnProc,"SIMPLEBTN");
     auto re=h::StrToInt(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(h::constGlobalData::SECTION_POS,MAINWINDOWNAME),4);
     SendMessage(CreateWindowEx(WS_EX_TOPMOST|WS_EX_LAYERED,TEXT(MAIN_WINDOW_CLASS),TEXT(h::constGlobalData::MODE_INPUT),WS_CLIPCHILDREN|WS_VISIBLE|WS_OVERLAPPEDWINDOW,re[X],re[Y],re[WIDTH],re[HEIGHT],NULL,LoadMenu(hInstance,h::constGlobalData::MAINMENU),hInstance,NULL),WM_SETICON,ICON_BIG,(LPARAM)LoadIcon(hInstance,h::constGlobalData::ICON_NAME));
-    
+    re=h::StrToInt(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_COLOR),3);
+    h::global::borderBrush=CreateSolidBrush(RGB(re[0],re[1],re[2]));
     while(GetMessage(&msg,NULL,0,0)){
         TranslateMessage(&msg);
         DispatchMessage(&msg);
