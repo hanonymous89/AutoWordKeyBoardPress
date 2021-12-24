@@ -453,7 +453,7 @@ LRESULT CALLBACK scrollProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         {
             int nowc=data[hwnd].now/(static_cast<double>(rect.right)/data[hwnd].end);
             if(data[hwnd].nowc!=nowc&&GetParent(hwnd)!=NULL){
-            SendMessage(GetParent(hwnd),WM_COMMAND,h::constGlobalData::NUM_CHANGE,0);
+            SendMessage(GetParent(hwnd),WM_COMMAND,h::constGlobalData::NUM_CHANGE,LPARAM(hwnd));
             }
             data[hwnd].nowc=nowc;
 
@@ -497,16 +497,7 @@ LRESULT CALLBACK scrollProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     }
     return DefWindowProc(hwnd,msg,wp,lp);
 }
-WNDPROC hookrgb;
-LRESULT CALLBACK rgbProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
-    RECT rect,re;
-    switch(msg){
-        case WM_PAINT:
-        InvalidateRect(GetParent(hwnd),NULL,TRUE);
-        break;
-    }
-    return CallWindowProc(hookrgb,hwnd,msg,wp,lp);
-}
+
 LRESULT CALLBACK settingProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     static HWND alpha,r,g,b;
     static h::ResizeManager rm;
@@ -537,10 +528,6 @@ LRESULT CALLBACK settingProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
             
             
         }
-        hookrgb=(WNDPROC)SetWindowLong(r,GWL_WNDPROC,(LONG)rgbProc);
-        SetWindowLong(g,GWL_WNDPROC,(LONG)rgbProc);
-        SetWindowLong(b,GWL_WNDPROC,(LONG)rgbProc);
-        // SendMessage(alpha,WM_COMMAND,h::constGlobalData::,h::StrToInt(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_ALPHA),1)[0]);
         h::global::hwnds.clear();
         EnumChildWindows(hwnd,addGlobalHwndsChild,0);
         rm=std::move(h::ResizeManager(hwnd,h::global::hwnds));
@@ -558,24 +545,20 @@ LRESULT CALLBACK settingProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         case WM_SIZE:
         rm.resize();
         break;
+        case WM_COMMAND:
+            switch(wp){
+                case h::constGlobalData::NUM_CHANGE:
+                    if(HWND(lp)!=alpha){//not rgb
+                        InvalidateRect(hwnd,NULL,TRUE);
+                        UpdateWindow(hwnd);
+                    }
+                break;
+            }
+        break;
     }
     return DefWindowProc(hwnd,msg,wp,lp);
 }
-// LRESULT CALLBACK reparentProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
-//     switch(msg){
-//         case WM_PAINT:
-//         if(GetParent(hwnd)==NULL)break;
-//         InvalidateRect(GetParent(hwnd),NULL,TRUE);
-//         // UpdateWindow(GetParent(hwnd));
-//         break;
-//     }
-//     return CallWindowProc(h::global::reParent[hwnd],hwnd,msg,wp,lp);
-// }
-// namespace h{
-//     void addReparentProc(HWND hwnd){
-//         h::global::reParent[hwnd]=(WNDPROC)SetWindowLong(hwnd,GWL_WNDPROC,(LONG)reparentProc);
-//     }
-// };
+
 LRESULT CALLBACK listProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     static std::unordered_map<HWND,h::listData> data;
     RECT rect;
