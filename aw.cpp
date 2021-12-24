@@ -25,9 +25,15 @@ namespace h{
             constexpr auto MODE_INPUT=MAINWINDOWNAME ":Input";
             constexpr auto MODE_OUTPUT=MAINWINDOWNAME ":Output";
             constexpr auto MAINMENU=TEXT("MAINMENU");
-            constexpr auto NUM_GET=1;
-            constexpr auto NUM_SET=2;
+            constexpr auto NUM_GET=100;
+            constexpr auto NUM_SET=NUM_GET+1;
+            constexpr auto NUM_SET_END=NUM_SET+1;
+            constexpr auto NUM_CHANGE=NUM_SET_END+1;
             constexpr auto BTN_SET=1;
+            constexpr auto LIST_SET=1;//SET 使い分けなくてもいい
+            constexpr auto LIST_PUSH=LIST_SET+1;
+            constexpr auto LIST_GET_SELECT=LIST_PUSH+1;
+            constexpr auto LIST_DELETE=LIST_GET_SELECT+1;
             constexpr auto SECTION_SHOW="SHOW";
             constexpr auto KEY_ALPHA="alpha";
             constexpr auto KEY_BK_COLOR="bk";
@@ -36,6 +42,7 @@ namespace h{
         };
         namespace global{
             std::vector<HWND> hwnds;
+            std::unordered_map<HWND,WNDPROC> reParent;
             HBRUSH borderBrush,
                    bkBrush;
         };
@@ -389,7 +396,7 @@ namespace h{
     };
     inline auto baseStyle(WNDPROC wndproc,LPCSTR name){
         WNDCLASS winc;
-        winc.style=CS_VREDRAW|CS_HREDRAW;
+        winc.style=CS_VREDRAW|CS_HREDRAW|CS_DBLCLKS;
         winc.cbClsExtra=winc.cbWndExtra=0;
         winc.hInstance=(HINSTANCE)GetModuleHandle(0);
         winc.hIcon=LoadIcon(winc.hInstance,h::constGlobalData::ICON_NAME);
@@ -409,6 +416,14 @@ namespace h{
         int msg;
         COLORREF color,push;
     };
+    struct listData{
+        std::vector<std::string> list;
+        int active;
+        int oneHeight;//itemcount
+        int scrollH=0;
+        int msg;
+        HWND scroll;
+    };
 };
 BOOL CALLBACK addGlobalHwndsChild(HWND hwnd,LPARAM lp){
     h::global::hwnds.push_back(hwnd);
@@ -420,54 +435,62 @@ LRESULT CALLBACK scrollProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     HDC hdc;
     RECT rect;
     HBRUSH defb,colorb;
-    static std::unordered_map<HWND,h::scrollData> each;
+    static std::unordered_map<HWND,h::scrollData> data;
     switch(msg){
         case WM_DESTROY:
-        each.clear();
+        data.clear();
         break;
         case WM_CREATE:
-        each[hwnd];
+        data[hwnd];
         break;
         case WM_PAINT:
         GetClientRect(hwnd,&rect);
         hdc=BeginPaint(hwnd,&ps);
-        colorb=CreateSolidBrush(RGB(0,255,0));//(255*3)/end
+        colorb=CreateSolidBrush(RGB(0,255,0));//(255*3)/end//h::global::bordercolor
         defb=(HBRUSH)SelectObject(hdc,colorb);
-        Rectangle(hdc,each[hwnd].now,0,each[hwnd].now+10,rect.bottom);
+        Rectangle(hdc,data[hwnd].now,0,data[hwnd].now+10,rect.bottom);
         FrameRect(hdc,&rect,colorb);
         {
-        each[hwnd].nowc=each[hwnd].now/(static_cast<double>(rect.right)/each[hwnd].end);
-        std::string text=(h::getWindowStr(hwnd)+h::cast::toString(each[hwnd].nowc));
-        TextOut(hdc,each[hwnd].now,rect.bottom/2,text.c_str(),text.size());
+            int nowc=data[hwnd].now/(static_cast<double>(rect.right)/data[hwnd].end);
+            if(data[hwnd].nowc!=nowc&&GetParent(hwnd)!=NULL){
+            SendMessage(GetParent(hwnd),WM_COMMAND,h::constGlobalData::NUM_CHANGE,0);
+            }
+            data[hwnd].nowc=nowc;
+
+        std::string text=(h::getWindowStr(hwnd)+h::cast::toString(data[hwnd].nowc));
+        TextOut(hdc,data[hwnd].now,rect.bottom/2,text.c_str(),text.size());
         }
         SelectObject(hdc,defb);
         DeleteObject(colorb);
         EndPaint(hwnd,&ps);
         break;
         case WM_LBUTTONDOWN:
-        each[hwnd].is_move=true;
+        data[hwnd].is_move=true;
         break;
         case WM_LBUTTONUP:
-        each[hwnd].is_move=false;
+        data[hwnd].is_move=false;
         break;
         case WM_MOUSEMOVE:
-        if(!each[hwnd].is_move){
+        if(!data[hwnd].is_move){
             break;
         }
-        each[hwnd].now=MAKEPOINTS(lp).x;
+        data[hwnd].now=MAKEPOINTS(lp).x;
         InvalidateRect(hwnd,NULL,TRUE);
         UpdateWindow(hwnd);
         break;
         case WM_COMMAND:
             switch(wp){
                 case h::constGlobalData::NUM_GET:
-                return each[hwnd].nowc;
+                return data[hwnd].nowc;
                 case h::constGlobalData::NUM_SET:
-                each[hwnd].start=((struct h::scrollData*)lp)->start;
-                each[hwnd].end=((struct h::scrollData*)lp)->end;
-                each[hwnd].now=((struct h::scrollData*)lp)->now;
-                each[hwnd].is_move=((struct h::scrollData*)lp)->is_move;
-                each[hwnd].nowc=((struct h::scrollData*)lp)->nowc;
+                data[hwnd].start=((struct h::scrollData*)lp)->start;
+                data[hwnd].end=((struct h::scrollData*)lp)->end;
+                data[hwnd].now=((struct h::scrollData*)lp)->now;
+                data[hwnd].is_move=((struct h::scrollData*)lp)->is_move;
+                data[hwnd].nowc=((struct h::scrollData*)lp)->nowc;
+                break;
+                case h::constGlobalData::NUM_SET_END:
+                data[hwnd].end=lp;
                 break;
             }
         break;
@@ -538,6 +561,120 @@ LRESULT CALLBACK settingProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     }
     return DefWindowProc(hwnd,msg,wp,lp);
 }
+// LRESULT CALLBACK reparentProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
+//     switch(msg){
+//         case WM_PAINT:
+//         if(GetParent(hwnd)==NULL)break;
+//         InvalidateRect(GetParent(hwnd),NULL,TRUE);
+//         // UpdateWindow(GetParent(hwnd));
+//         break;
+//     }
+//     return CallWindowProc(h::global::reParent[hwnd],hwnd,msg,wp,lp);
+// }
+// namespace h{
+//     void addReparentProc(HWND hwnd){
+//         h::global::reParent[hwnd]=(WNDPROC)SetWindowLong(hwnd,GWL_WNDPROC,(LONG)reparentProc);
+//     }
+// };
+LRESULT CALLBACK listProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
+    static std::unordered_map<HWND,h::listData> data;
+    RECT rect;
+    HDC hdc;
+    PAINTSTRUCT ps;
+    int oneSize;
+    switch(msg){
+        case WM_CREATE:
+        data[hwnd];
+        break;
+        case WM_LBUTTONDOWN:
+        GetClientRect(hwnd,&rect);
+        oneSize=static_cast<double>(rect.bottom)/data[hwnd].oneHeight;
+        data[hwnd].active=(MAKEPOINTS(lp).y/oneSize)+SendMessage(data[hwnd].scroll,WM_COMMAND,h::constGlobalData::NUM_GET,0)-1;//crash 0/n
+        InvalidateRect(hwnd,NULL,TRUE);
+        UpdateWindow(hwnd);
+        break;
+        case WM_LBUTTONDBLCLK:
+        if(GetParent(hwnd)==NULL)break;
+        SendMessage(GetParent(hwnd),WM_COMMAND,MAKEWPARAM(data[hwnd].msg,data[hwnd].msg),0);
+        break;
+        case WM_PAINT:
+        GetClientRect(hwnd,&rect);
+        hdc=BeginPaint(hwnd,&ps);
+        SetTextColor(hdc,RGB(0,255,0));
+        SetBkColor(hdc,RGB(0,0,0));
+        {
+            oneSize=static_cast<double>(rect.bottom)/data[hwnd].oneHeight;
+            HFONT font=CreateFont(oneSize,0,0,0,FW_REGULAR,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,DEFAULT_QUALITY,DEFAULT_PITCH,TEXT("游明朝"));
+            SelectObject(hdc,font);
+            for(int hash=SendMessage(data[hwnd].scroll,WM_COMMAND,h::constGlobalData::NUM_GET,0),i=1;hash<data[hwnd].list.size();++hash,++i){
+                if(hash==data[hwnd].active){
+                    SetTextColor(hdc,RGB(0,0,0));
+                    SetBkColor(hdc,RGB(0,255,0));
+                    TextOut(hdc,0,oneSize*i,data[hwnd].list[hash].c_str(),data[hwnd].list[hash].size());
+                    SetTextColor(hdc,RGB(0,255,0));
+                    SetBkColor(hdc,RGB(0,0,0));
+                    
+                    continue;
+                }
+                TextOut(hdc,0,oneSize*i,data[hwnd].list[hash].c_str(),data[hwnd].list[hash].size());
+            }
+            SelectObject(hdc,GetStockObject(SYSTEM_FONT));
+            DeleteObject(font);
+        }
+        for(int i=0,max=oneSize;i<max;++i){
+            RECT item{
+                0,
+                static_cast<int>((oneSize)*i),
+                rect.right,
+                static_cast<int>((oneSize)*(i+1))
+            };
+            FrameRect(hdc,&item,h::global::borderBrush);
+        }
+        EndPaint(hwnd,&ps);
+        break;
+        case WM_COMMAND:
+        switch(wp){
+            case h::constGlobalData::LIST_SET:
+            data[hwnd].active=((struct h::listData*)lp)->active;
+            data[hwnd].list=((struct h::listData*)lp)->list;
+            data[hwnd].oneHeight=((struct h::listData*)lp)->oneHeight;
+            data[hwnd].scrollH=((struct h::listData*)lp)->scrollH;
+            data[hwnd].msg=((struct h::listData*)lp)->msg;
+            {
+                GetClientRect(hwnd,&rect);
+                oneSize=static_cast<double>(rect.bottom)/data[hwnd].oneHeight;
+                if(data[hwnd].scroll==NULL)
+                data[hwnd].scroll=CreateWindowEx(WS_EX_TOPMOST,TEXT("SCROLL"),TEXT("Height"),WS_CHILD|WS_VISIBLE|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,0,0,rect.right,oneSize,hwnd,NULL,(HINSTANCE)GetModuleHandle(0),NULL);
+                // h::addReparentProc(data[hwnd].scroll);
+                h::scrollData scrollData{0,static_cast<int>(data[hwnd].list.size()),0,0,false};
+                SendMessage(data[hwnd].scroll,WM_COMMAND,h::constGlobalData::NUM_SET,(LPARAM)&scrollData);
+            }
+            break;
+            case h::constGlobalData::LIST_PUSH:
+                data[hwnd].list.push_back(((std::string*)lp)->c_str());
+                SendMessage(data[hwnd].scroll,WM_COMMAND,h::constGlobalData::NUM_SET_END,data[hwnd].list.size());
+                InvalidateRect(hwnd,NULL,TRUE);
+                UpdateWindow(hwnd);
+            break;
+            case h::constGlobalData::LIST_GET_SELECT:
+                return (LONG)&data[hwnd].list[data[hwnd].active];
+            break;
+            case h::constGlobalData::LIST_DELETE:
+                data[hwnd].list.erase(data[hwnd].list.begin()+lp);
+                
+                SendMessage(data[hwnd].scroll,WM_COMMAND,h::constGlobalData::NUM_SET_END,data[hwnd].list.size());
+                InvalidateRect(hwnd,NULL,TRUE);
+                UpdateWindow(hwnd);
+            break;
+            case h::constGlobalData::NUM_CHANGE:
+                InvalidateRect(hwnd,NULL,TRUE);
+                UpdateWindow(hwnd);
+            break;
+        }
+        break;
+    }
+    return DefWindowProc(hwnd,msg,wp,lp);
+}
 LRESULT CALLBACK btnProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     PAINTSTRUCT ps;
     HDC hdc;
@@ -590,7 +727,6 @@ LRESULT CALLBACK btnProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     }
     return DefWindowProc(hwnd,msg,wp,lp);
 }
-
 LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     constexpr int MSG1=1,
                   MSG2=MSG1+1,
@@ -624,7 +760,6 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
             PostQuitMessage(0);
             
         break;
-        case WM_CTLCOLORLISTBOX:
         case WM_CTLCOLOREDIT:
         {   
             
@@ -646,8 +781,11 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
                 SendMessage(CreateWindow(TEXT("SIMPLEBTN"),TEXT("Add"),BS_PUSHBUTTON|WS_VISIBLE|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS|BS_MULTILINE,(rect.right/10)*8,0,(rect.right/10)*2,rect.bottom/2,hwnd,(HMENU)MSG1,LPCREATESTRUCT(lp)->hInstance,NULL),WM_COMMAND,h::constGlobalData::BTN_SET,(LPARAM)&btnData);
                 btnData.msg=MSG3;
                 SendMessage(CreateWindow(TEXT("SIMPLEBTN"),TEXT("Sub"),BS_PUSHBUTTON|WS_VISIBLE|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS|BS_MULTILINE,(rect.right/10)*8,rect.bottom/2,(rect.right/10)*2,rect.bottom/2,hwnd,(HMENU)MSG3,LPCREATESTRUCT(lp)->hInstance,NULL),WM_COMMAND,h::constGlobalData::BTN_SET,(LPARAM)&btnData);
+                h::listData listData{h::split(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(SECTION_STRING,KEY_WORDLIST),CELEND),0,10,10,MSG2,NULL};//
+                list=CreateWindow(TEXT("SIMPLELIST"),TEXT(""),BS_PUSHBUTTON|WS_VISIBLE|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS|BS_MULTILINE,0,0,(rect.right/10)*8,rect.bottom/2,hwnd,NULL,LPCREATESTRUCT(lp)->hInstance,NULL);
+                SendMessage(list,WM_COMMAND,h::constGlobalData::LIST_SET,(LPARAM)&listData);
             }
-            list=CreateWindow(TEXT("LISTBOX"),TEXT(KEY_WORDLIST),WS_HSCROLL|WS_VSCROLL|LBS_NOTIFY |WS_VISIBLE|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,0,0,(rect.right/10)*8,rect.bottom/2,hwnd,(HMENU)MSG2,(LPCREATESTRUCT(lp))->hInstance,NULL);
+            // list=CreateWindow(TEXT("LISTBOX"),TEXT(KEY_WORDLIST),WS_HSCROLL|WS_VSCROLL|LBS_NOTIFY |WS_VISIBLE|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,0,0,(rect.right/10)*8,rect.bottom/2,hwnd,(HMENU)MSG2,(LPCREATESTRUCT(lp))->hInstance,NULL);
             edit=CreateWindow(TEXT("EDIT"),TEXT(""),ES_AUTOHSCROLL|ES_AUTOVSCROLL|WS_HSCROLL|WS_VSCROLL|WS_VISIBLE|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS|ES_MULTILINE|ES_WANTRETURN,0,rect.bottom/2,(rect.right/10)*8,rect.bottom/2,hwnd,NULL,LPCREATESTRUCT(lp)->hInstance,NULL);
             ofn.lStructSize=sizeof(OPENFILENAME);
             ofn.hwndOwner=hwnd;
@@ -656,9 +794,6 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
             ofn.lpstrFile=path;
             ofn.nMaxFile=MAX_PATH;
             ofn.Flags=OFN_NOVALIDATE;
-            for(auto word:h::split(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(SECTION_STRING,KEY_WORDLIST),CELEND)){
-                SendMessage(list,LB_ADDSTRING,0,(LPARAM)word.c_str());
-            }
             EnumChildWindows(hwnd,addGlobalHwndsChild,0);
             rm=std::move(h::ResizeManager(hwnd,h::global::hwnds));
         break;
@@ -669,19 +804,27 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
             h::windowLong(hwnd,WS_EX_NOACTIVATE,h::customBool(h::getWindowStr(hwnd).compare(h::constGlobalData::MODE_INPUT),h::modeOperator::SUB,h::modeOperator::ADD),true);
             SetWindowText(hwnd,h::customBool(h::getWindowStr(hwnd).compare(h::constGlobalData::MODE_INPUT),TEXT(h::constGlobalData::MODE_INPUT),TEXT(h::constGlobalData::MODE_OUTPUT)));
         break;
+        case WM_PAINT:
+        GetClientRect(hwnd,&rect);
+        hdc=BeginPaint(hwnd,&ps);
+        FrameRect(hdc,&rect,h::global::borderBrush);
+        EndPaint(hwnd,&ps);
+        break;
         case WM_COMMAND:
             switch(LOWORD(wp)){
                 case MSG1:
-                    SendMessage(list,LB_ADDSTRING,SendMessage(list,LB_GETCOUNT,0,0),(LPARAM)h::replaceAll(h::getWindowStr(edit),"\r\n",REPLACE_ENTER).c_str());
+                    str=h::replaceAll(h::getWindowStr(edit),"\r\n",REPLACE_ENTER);
+                    SendMessage(list,WM_COMMAND,h::constGlobalData::LIST_PUSH,(LPARAM)&str);
                 break;
                 case MSG3:
-                    if(SendMessage(list,LB_GETCURSEL,0,0)==LB_ERR)break;
-                    SendMessage(list,LB_DELETESTRING,SendMessage(list,LB_GETCURSEL,0,0),0);
+                    // if(SendMessage(list,LB_GETCURSEL,0,0)==LB_ERR)break;
+                    SendMessage(list,WM_COMMAND,h::constGlobalData::LIST_DELETE,SendMessage(list,WM_COMMAND,h::constGlobalData::LIST_GET_SELECT,0));
                 break;
                 case MSG2:
-                    if(HIWORD(wp)==LBN_DBLCLK){
-                        h::pressKeyAll(h::stringToWstring(h::replaceAll(h::getListStr(list,SendMessage(list,LB_GETCURSEL,0,0)),REPLACE_ENTER,h::constGlobalData::ENTER)));
-                    }
+                    // if(HIWORD(wp)==LBN_DBLCLK){
+                        // ((std::string*)SendMessage(list,WM_COMMAND,h::constGlobalData::LIST_GET_SELECT,0))->c_str()
+                    h::pressKeyAll(h::stringToWstring(h::replaceAll(((std::string*)SendMessage(list,WM_COMMAND,h::constGlobalData::LIST_GET_SELECT,0))->c_str(),REPLACE_ENTER,h::constGlobalData::ENTER)));
+                    // }
                     
                 break;
                 case FILEOPEN:
@@ -695,9 +838,9 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
                 break;
                 case FILESAVE:
                     if(!GetOpenFileName(&ofn))break;
-                    for(int i=SendMessage(list,LB_GETCOUNT,0,0)-1;i>=0;--i){
-                        str+=h::getListStr(list,i)+CELEND;
-                    }
+                    // for(int i=SendMessage(list,LB_GETCOUNT,0,0)-1;i>=0;--i){
+                    //     str+=h::getListStr(list,i)+CELEND;
+                    // }
                     h::File(path).write(str,MessageBox(hwnd,TEXT("reset?"),TEXT("Question"),MB_ICONQUESTION|MB_YESNO)==IDYES);
                 break;
                 case SHOWHELP:
@@ -722,6 +865,7 @@ int WINAPI WinMain(HINSTANCE hInstance,HINSTANCE hPrevInstance,PSTR lpCmdLine,in
     h::baseStyle(scrollProc,"SCROLL");
     h::baseStyle(settingProc,"SETTING");
     h::baseStyle(btnProc,"SIMPLEBTN");
+    h::baseStyle(listProc,"SIMPLELIST");
     auto re=h::StrToInt(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(h::constGlobalData::SECTION_POS,MAINWINDOWNAME),4);
     SendMessage(CreateWindowEx(WS_EX_TOPMOST|WS_EX_LAYERED,TEXT(MAIN_WINDOW_CLASS),TEXT(h::constGlobalData::MODE_INPUT),WS_CLIPCHILDREN|WS_VISIBLE|WS_OVERLAPPEDWINDOW,re[X],re[Y],re[WIDTH],re[HEIGHT],NULL,LoadMenu(hInstance,h::constGlobalData::MAINMENU),hInstance,NULL),WM_SETICON,ICON_BIG,(LPARAM)LoadIcon(hInstance,h::constGlobalData::ICON_NAME));
     re=h::StrToInt(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_BORDER_COLOR),3);
