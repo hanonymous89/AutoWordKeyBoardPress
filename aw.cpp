@@ -16,66 +16,120 @@ namespace h{
             static constexpr int R=0,G=R+1,B=G+1;
             T rgb[3];
         };  
-        class colorManager{
-            private:
-            COLORREF rgb;
-            HBRUSH hbrush;
+        template <class BT,class CT/*,class CCT*/>
+        class ObjectManager{
+            protected:
+            BT base;
+            CT created;
+            virtual void cr(BT base)=0;
+            virtual void dr()=0;
             public:
-            inline colorManager(const COLORREF rgb)noexcept(true):rgb(rgb){
-                hbrush=CreateSolidBrush(rgb);
+            ObjectManager(){}
+            ObjectManager(BT base):base(base){}
+            virtual ~ObjectManager(){}
+            virtual BT &getBase()=0;//{return base}protected
+            virtual CT &getCreated()=0;
+            virtual void reset(BT base)=0;
+            // virtual CCT reset(BT base);
+            // virtual ObjectManager& reset(BT base)=0;
+            
+        };
+        class colorManager:private ObjectManager<COLORREF,HBRUSH/*,cm*/>{
+            private:
+            void cr(COLORREF base) override{
+                this->base=base;
+                created=CreateSolidBrush(base);
             }
-            inline colorManager(){}
-            inline ~colorManager(){
-                if(hbrush==NULL)return;
-                DeleteObject(hbrush);
+            void dr(){
+                if(created==NULL)return;
+                DeleteObject(created);                
             }
-            inline auto &set(const COLORREF rgb)noexcept(true){
-                this->rgb=rgb;
-                if(hbrush!=NULL)
-                DeleteObject(hbrush);
-                hbrush=CreateSolidBrush(rgb);
+            public:
+            colorManager(){}
+            colorManager(COLORREF base):ObjectManager(base){
+                cr(base);
+            }
+            COLORREF &getBase()override{
+                return base;
+            }
+            HBRUSH &getCreated()override{
+                return created;
+            }
+            ~colorManager() override{
+                dr();
+            }
+            void reset(COLORREF base)override{
+                dr();
+                cr(base);
+            }
+        };
+        class fontManager:private ObjectManager<std::string,HFONT>{
+            private:
+            int height;
+            void cr(std::string base) override{
+                this->base=base;
+                created=CreateFont(height,0,0,0,FW_REGULAR,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,DEFAULT_QUALITY,DEFAULT_PITCH,base.c_str());
+            }
+            void dr(){
+                if(created==NULL)return;
+                DeleteObject(created);                
+            }
+            public:
+            fontManager(){}
+            fontManager(std::string base):ObjectManager(base){
+                cr(base);
+            }
+            std::string &getBase()override{
+                return base;
+            }
+            HFONT &getCreated()override{
+                return created;
+            }
+            ~fontManager() override{
+                dr();
+            }
+            void reset(std::string base)override{
+                dr();
+                cr(base);
+            }
+            auto &setHeight(decltype(height) height){
+                this->height=height;
                 return *this;
-            }
-            inline auto &getRgb(){
-                return rgb;
-            }
-            inline auto &getBrush(){
-                return hbrush;
             }
         };
         namespace constGlobalData{
-            constexpr auto ENTER="\n";
-            constexpr auto SETTING_FILE="setting.ini";
-            constexpr auto ICON_NAME=TEXT("WAICON");
-            constexpr auto SECTION_POS="POS";
             #define  MAINWINDOWNAME "Mode"
-            constexpr auto MODE_INPUT=MAINWINDOWNAME ":Input";
-            constexpr auto MODE_OUTPUT=MAINWINDOWNAME ":Output";
-            constexpr auto MAINMENU=TEXT("MAINMENU");
-            constexpr auto NUM_GET=100;
-            constexpr auto NUM_SET=NUM_GET+1;
-            constexpr auto NUM_SET_END=NUM_SET+1;
-            constexpr auto NUM_CHANGE=NUM_SET_END+1;
-            constexpr auto BTN_SET=1;
-            constexpr auto LIST_SET=1;//SET 使い分けなくてもいい
-            constexpr auto LIST_PUSH=LIST_SET+1;
-            constexpr auto LIST_GET_SELECT=LIST_PUSH+1;
-            constexpr auto LIST_DELETE=LIST_GET_SELECT+1;
-            constexpr auto LIST_GET_ITEM=LIST_DELETE+1;
-            constexpr auto LIST_GET_OBJ=LIST_GET_ITEM+1;
-            constexpr auto SECTION_SHOW="SHOW";
-            constexpr auto KEY_ALPHA="alpha";
-            constexpr auto KEY_BK_COLOR="bk";
-            constexpr auto KEY_BORDER_COLOR="border";
+            constexpr auto ICON_NAME=TEXT("WAICON"),
+                           MAINMENU=TEXT("MAINMENU");
+            constexpr auto ENTER="\n",
+                           SETTING_FILE="setting.ini",
+                           SECTION_POS="POS",
+                           MODE_INPUT=MAINWINDOWNAME ":Input",
+                           MODE_OUTPUT=MAINWINDOWNAME ":Output",
+                           SECTION_SHOW="SHOW",
+                           KEY_ALPHA="alpha",
+                           KEY_BK_COLOR="bk",
+                           KEY_BORDER_COLOR="border",
+                           KEY_FONT="font";
+            constexpr auto NUM_GET=100,
+                           NUM_SET=NUM_GET+1,
+                           NUM_SET_END=NUM_SET+1,
+                           NUM_CHANGE=NUM_SET_END+1,
+                           BTN_SET=1,
+                           LIST_SET=1,
+                           LIST_PUSH=LIST_SET+1,
+                           LIST_GET_SELECT=LIST_PUSH+1,
+                           LIST_DELETE=LIST_GET_SELECT+1,
+                           LIST_GET_ITEM=LIST_DELETE+1,
+                           LIST_GET_OBJ=LIST_GET_ITEM+1;
             
         };
         namespace global{
             std::vector<HWND> hwnds;
-            std::unordered_map<HWND,WNDPROC> reParent;
-            // HBRUSH borderBrush,
-            //        bkBrush;
+            std::vector<std::string> *vecStr;
             colorManager borderBrush,
                          bkBrush;
+            fontManager font;
         };
         namespace cast{
         template <class T>
@@ -458,7 +512,25 @@ BOOL CALLBACK addGlobalHwndsChild(HWND hwnd,LPARAM lp){
     h::global::hwnds.push_back(hwnd);
     return TRUE;
 }
-
+int CALLBACK EnumFontFamProc(LOGFONT *lf,TEXTMETRIC * tm,DWORD fontType,LPARAM lp){
+    if(h::global::vecStr==nullptr)return 0;
+    h::global::vecStr->push_back(lf->lfFaceName);
+    return 1;
+}
+namespace h{
+    inline void setFontList(decltype(h::global::vecStr) vecStr){
+        h::global::vecStr=vecStr;
+        auto before=vecStr;
+        LOGFONT lf;
+        lf.lfCharSet=DEFAULT_CHARSET;
+        lf.lfFaceName[0]=lf.lfPitchAndFamily=0;
+        HDC hdc;
+        hdc=GetDC(0);
+        EnumFontFamiliesEx(hdc,&lf,(FONTENUMPROC)EnumFontFamProc,(LONG_PTR)&lf,0);
+        ReleaseDC(0,hdc);
+        h::global::vecStr=before;
+    }
+};
 LRESULT CALLBACK scrollProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     PAINTSTRUCT ps;
     HDC hdc;
@@ -475,9 +547,10 @@ LRESULT CALLBACK scrollProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         case WM_PAINT:
         GetClientRect(hwnd,&rect);
         hdc=BeginPaint(hwnd,&ps);
-        defb=(HBRUSH)SelectObject(hdc,h::global::borderBrush.getBrush());
+        SelectObject(hdc,h::global::font.setHeight(rect.bottom).getCreated());
+        defb=(HBRUSH)SelectObject(hdc,h::global::borderBrush.getCreated());
         Rectangle(hdc,data[hwnd].now,0,data[hwnd].now+10,rect.bottom);
-        FrameRect(hdc,&rect,h::global::borderBrush.getBrush());
+        FrameRect(hdc,&rect,h::global::borderBrush.getCreated());
         {
             int nowc=data[hwnd].now/(static_cast<double>(rect.right)/data[hwnd].end);
             if(data[hwnd].nowc!=nowc&&GetParent(hwnd)!=NULL){
@@ -486,6 +559,8 @@ LRESULT CALLBACK scrollProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
             data[hwnd].nowc=nowc;
 
         std::string text=(h::getWindowStr(hwnd)+h::cast::toString(data[hwnd].nowc));
+        SetTextColor(hdc,h::global::borderBrush.getBase());
+        SetBkColor(hdc,h::global::bkBrush.getBase());
         TextOut(hdc,data[hwnd].now,rect.bottom/2,text.c_str(),text.size());
         }
         SelectObject(hdc,defb);
@@ -526,8 +601,9 @@ LRESULT CALLBACK scrollProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
 }
 
 LRESULT CALLBACK settingProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
-    static HWND alpha,r,g,b;
+    static HWND alpha,r,g,b,fontList;
     static h::ResizeManager rm;
+    constexpr int MSG1=1;
     PAINTSTRUCT ps;
     HDC hdc;
     HBRUSH defb,colorb;
@@ -536,7 +612,8 @@ LRESULT CALLBACK settingProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         case WM_DESTROY:
             h::INI(h::constGlobalData::SETTING_FILE)
             .editValue(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_ALPHA,h::cast::toString((int)SendMessage(alpha,WM_COMMAND,h::constGlobalData::NUM_GET,0)))
-            // .editValue(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_COLOR,h::vecToString(h::cast::toString(SendMessage(r,WM_COMMAND,h::constGlobalData::NUM_GET,0),SendMessage(g,WM_COMMAND,h::constGlobalData::NUM_GET,0),SendMessage(b,WM_COMMAND,h::constGlobalData::NUM_GET,0))," "))
+            .editValue(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_BORDER_COLOR,h::vecToString(h::cast::toString(SendMessage(r,WM_COMMAND,h::constGlobalData::NUM_GET,0),SendMessage(g,WM_COMMAND,h::constGlobalData::NUM_GET,0),SendMessage(b,WM_COMMAND,h::constGlobalData::NUM_GET,0))," "))
+            .editValue(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_FONT,((std::string*)(SendMessage(fontList,WM_COMMAND,h::constGlobalData::LIST_GET_ITEM,SendMessage(fontList,WM_COMMAND,h::constGlobalData::LIST_GET_SELECT,0))))->c_str())
             .save();
         break;
         case WM_CREATE:
@@ -545,14 +622,16 @@ LRESULT CALLBACK settingProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         r=CreateWindowEx(WS_EX_TOPMOST,TEXT("SCROLL"),TEXT("r"),WS_CHILD|WS_VISIBLE|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,0,rect.bottom/5,rect.right/2,rect.bottom/5,hwnd,NULL,LPCREATESTRUCT(lp)->hInstance,NULL);
         g=CreateWindowEx(WS_EX_TOPMOST,TEXT("SCROLL"),TEXT("g"),WS_CHILD|WS_VISIBLE|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,0,(rect.bottom/5)*2,rect.right/2,rect.bottom/5,hwnd,NULL,LPCREATESTRUCT(lp)->hInstance,NULL);
         b=CreateWindowEx(WS_EX_TOPMOST,TEXT("SCROLL"),TEXT("b"),WS_CHILD|WS_VISIBLE|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,0,(rect.bottom/5)*3,rect.right/2,rect.bottom/5,hwnd,NULL,LPCREATESTRUCT(lp)->hInstance,NULL);
-        
+        fontList=CreateWindow(TEXT("SIMPLELIST"),TEXT(""),WS_CHILD|WS_VISIBLE|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,rect.right/2,0,rect.right/2,rect.bottom/5*4,hwnd,NULL,LPCREATESTRUCT(lp)->hInstance,NULL);
         {
             h::scrollData data{0,255,0,0,false};
             SendMessage(alpha,WM_COMMAND,h::constGlobalData::NUM_SET,(LPARAM)&data);
             SendMessage(r,WM_COMMAND,h::constGlobalData::NUM_SET,(LPARAM)&data);
             SendMessage(g,WM_COMMAND,h::constGlobalData::NUM_SET,(LPARAM)&data);
             SendMessage(b,WM_COMMAND,h::constGlobalData::NUM_SET,(LPARAM)&data);
-            
+            h::listData listData{{},0,10,MSG1,NULL};//
+            h::setFontList(&listData.list);
+            SendMessage(fontList,WM_COMMAND,h::constGlobalData::LIST_SET,LPARAM(&listData));           
             
         }
         h::global::hwnds.clear();
@@ -579,6 +658,8 @@ LRESULT CALLBACK settingProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
                         InvalidateRect(hwnd,NULL,TRUE);
                         UpdateWindow(hwnd);
                     }
+                break;
+                case MSG1:
                 break;
             }
         break;
@@ -610,26 +691,24 @@ LRESULT CALLBACK listProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         case WM_PAINT:
         GetClientRect(hwnd,&rect);
         hdc=BeginPaint(hwnd,&ps);
-        SetTextColor(hdc,RGB(0,255,0));
-        SetBkColor(hdc,RGB(0,0,0));
+        SetTextColor(hdc,h::global::borderBrush.getBase());
+        SetBkColor(hdc,h::global::bkBrush.getBase());
         {
             oneSize=static_cast<double>(rect.bottom)/data[hwnd].oneHeight;
-            HFONT font=CreateFont(oneSize,0,0,0,FW_REGULAR,FALSE,FALSE,FALSE,DEFAULT_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,DEFAULT_QUALITY,DEFAULT_PITCH,TEXT("游明朝"));
-            SelectObject(hdc,font);
-            for(int hash=SendMessage(data[hwnd].scroll,WM_COMMAND,h::constGlobalData::NUM_GET,0),i=1;hash<data[hwnd].list.size();++hash,++i){
+            SelectObject(hdc,h::global::font.setHeight(oneSize).getCreated());
+            for(int hash=SendMessage(data[hwnd].scroll,WM_COMMAND,h::constGlobalData::NUM_GET,0),i=1,end=static_cast<double>(rect.bottom)/oneSize;hash<data[hwnd].list.size()&&i<end;++hash,++i){
                 if(hash==data[hwnd].active){
-                    SetTextColor(hdc,RGB(0,0,0));
-                    SetBkColor(hdc,RGB(0,255,0));
+                    SetTextColor(hdc,h::global::bkBrush.getBase());
+                    SetBkColor(hdc,h::global::borderBrush.getBase());
                     TextOut(hdc,0,oneSize*i,data[hwnd].list[hash].c_str(),data[hwnd].list[hash].size());
-                    SetTextColor(hdc,RGB(0,255,0));
-                    SetBkColor(hdc,RGB(0,0,0));
-                    
+                    SetTextColor(hdc,h::global::borderBrush.getBase());
+                    SetBkColor(hdc,h::global::bkBrush.getBase());
                     continue;
                 }
                 TextOut(hdc,0,oneSize*i,data[hwnd].list[hash].c_str(),data[hwnd].list[hash].size());
             }
             SelectObject(hdc,GetStockObject(SYSTEM_FONT));
-            DeleteObject(font);
+            // DeleteObject(font);
         }
         for(int i=0,max=oneSize;i<max;++i){
             RECT item{
@@ -638,7 +717,7 @@ LRESULT CALLBACK listProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
                 rect.right,
                 static_cast<int>((oneSize)*(i+1))
             };
-            FrameRect(hdc,&item,h::global::borderBrush.getBrush());
+            FrameRect(hdc,&item,h::global::borderBrush.getCreated());
         }
         EndPaint(hwnd,&ps);
         break;
@@ -654,7 +733,6 @@ LRESULT CALLBACK listProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
                 oneSize=static_cast<double>(rect.bottom)/data[hwnd].oneHeight;
                 if(data[hwnd].scroll==NULL)
                 data[hwnd].scroll=CreateWindowEx(WS_EX_TOPMOST,TEXT("SCROLL"),TEXT("Height"),WS_CHILD|WS_VISIBLE|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,0,0,rect.right,oneSize,hwnd,NULL,(HINSTANCE)GetModuleHandle(0),NULL);
-                // h::addReparentProc(data[hwnd].scroll);
                 h::scrollData scrollData{0,static_cast<int>(data[hwnd].list.size()),0,0,false};
                 SendMessage(data[hwnd].scroll,WM_COMMAND,h::constGlobalData::NUM_SET,(LPARAM)&scrollData);
             }
@@ -670,7 +748,6 @@ LRESULT CALLBACK listProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
                     return (LONG)0;
                 }
                 return (LONG)data[hwnd].active;
-                // return (LONG)&data[hwnd].list[data[hwnd].active];
             break;
             case h::constGlobalData::LIST_GET_ITEM:
             return (LONG)&data[hwnd].list[lp];
@@ -721,12 +798,13 @@ LRESULT CALLBACK btnProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         case WM_PAINT:
         GetClientRect(hwnd,&rect);
         hdc=BeginPaint(hwnd,&ps);
-        SetTextColor(hdc,h::customBool(data[hwnd].flag,h::global::bkBrush.getRgb(),h::global::borderBrush.getRgb()));
-        SetBkColor(hdc,h::customBool(data[hwnd].flag,h::global::borderBrush.getRgb(),h::global::bkBrush.getRgb()));
-        defb=HBRUSH(SelectObject(hdc,h::customBool(data[hwnd].flag,h::global::borderBrush.getBrush(),h::global::bkBrush.getBrush())));
+        SetTextColor(hdc,h::customBool(data[hwnd].flag,h::global::bkBrush.getBase(),h::global::borderBrush.getBase()));
+        SetBkColor(hdc,h::customBool(data[hwnd].flag,h::global::borderBrush.getBase(),h::global::bkBrush.getBase()));
+        defb=HBRUSH(SelectObject(hdc,h::customBool(data[hwnd].flag,h::global::borderBrush.getCreated(),h::global::bkBrush.getCreated())));
         Rectangle(hdc,0,0,rect.right,rect.bottom);
+        SelectObject(hdc,h::global::font.setHeight(rect.bottom).getCreated());
         DrawText(hdc,h::getWindowStr(hwnd).c_str(),-1,&rect,DT_CENTER|DT_WORDBREAK|DT_VCENTER);
-        FrameRect(hdc,&rect,h::global::borderBrush.getBrush());
+        FrameRect(hdc,&rect,h::global::borderBrush.getCreated());
         SelectObject(hdc,defb);
         EndPaint(hwnd,&ps);
         break;
@@ -741,6 +819,8 @@ LRESULT CALLBACK btnProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     }
     return DefWindowProc(hwnd,msg,wp,lp);
 }
+
+
 LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     constexpr int MSG1=1,
                   MSG2=MSG1+1,
@@ -761,13 +841,9 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     RECT rect;
     switch(msg){
         case WM_DESTROY:
-            for(int i=SendMessage(list,LB_GETCOUNT,0,0)-1;i>=0;--i){
-                str+=h::getListStr(list,i)+CELEND;
-            }
             GetWindowRect(hwnd,&rect);
-            str=h::vecToString(((struct h::listData*)(SendMessage(list,WM_COMMAND,h::constGlobalData::LIST_GET_OBJ,0)))->list,CELEND);
             h::INI(h::constGlobalData::SETTING_FILE)
-            .editValue(SECTION_STRING,KEY_WORDLIST,str)
+            .editValue(SECTION_STRING,KEY_WORDLIST,h::vecToString(((struct h::listData*)(SendMessage(list,WM_COMMAND,h::constGlobalData::LIST_GET_OBJ,0)))->list,CELEND))
             .editValue(h::constGlobalData::SECTION_POS,MAINWINDOWNAME,h::vecToString(h::cast::toString(rect.left,rect.top,rect.right-rect.left,rect.bottom-rect.top)," "))
             .save();
             PostQuitMessage(0);
@@ -781,7 +857,7 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
             rgb_f=h::StrToInt(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_BK_COLOR),3);
             SetBkColor(HDC(wp),RGB(rgb_f[0],rgb_f[1],rgb_f[2]));
         }
-        return (LONG)h::global::bkBrush.getBrush();
+        return (LONG)h::global::bkBrush.getCreated();
         break;
         case WM_CREATE:
             if(!std::filesystem::exists(h::constGlobalData::SETTING_FILE)){
@@ -819,7 +895,7 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         case WM_PAINT:
         GetClientRect(hwnd,&rect);
         hdc=BeginPaint(hwnd,&ps);
-        FrameRect(hdc,&rect,h::global::borderBrush.getBrush());
+        FrameRect(hdc,&rect,h::global::borderBrush.getCreated());
         EndPaint(hwnd,&ps);
         break;
         case WM_COMMAND:
@@ -853,10 +929,7 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
                 break;
                 case FILESAVE:
                     if(!GetOpenFileName(&ofn))break;
-                    for(auto &item:((struct h::listData*)(SendMessage(list,WM_COMMAND,h::constGlobalData::LIST_GET_OBJ,0)))->list){
-                        str+=item+CELEND;
-                    }
-                    h::File(path).write(str,MessageBox(hwnd,TEXT("reset?"),TEXT("Question"),MB_ICONQUESTION|MB_YESNO)==IDYES);
+                    h::File(path).write(h::vecToString(((struct h::listData*)(SendMessage(list,WM_COMMAND,h::constGlobalData::LIST_GET_OBJ,0)))->list,CELEND),MessageBox(hwnd,TEXT("reset?"),TEXT("Question"),MB_ICONQUESTION|MB_YESNO)==IDYES);
                 break;
                 case SHOWHELP:
                     if(!std::filesystem::exists(HELPHTML))h::File(HELPHTML).write(
@@ -884,9 +957,10 @@ int WINAPI WinMain(HINSTANCE hInstance,HINSTANCE hPrevInstance,PSTR lpCmdLine,in
     auto re=h::StrToInt(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(h::constGlobalData::SECTION_POS,MAINWINDOWNAME),4);
     SendMessage(CreateWindowEx(WS_EX_TOPMOST|WS_EX_LAYERED,TEXT(MAIN_WINDOW_CLASS),TEXT(h::constGlobalData::MODE_INPUT),WS_CLIPCHILDREN|WS_VISIBLE|WS_OVERLAPPEDWINDOW,re[X],re[Y],re[WIDTH],re[HEIGHT],NULL,LoadMenu(hInstance,h::constGlobalData::MAINMENU),hInstance,NULL),WM_SETICON,ICON_BIG,(LPARAM)LoadIcon(hInstance,h::constGlobalData::ICON_NAME));
     re=h::StrToInt(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_BORDER_COLOR),3);
-    h::global::borderBrush.set(RGB(re[0],re[1],re[2]));
+    h::global::borderBrush.reset(RGB(re[0],re[1],re[2]));
     re=h::StrToInt(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_BK_COLOR),3);
-    h::global::bkBrush.set(RGB(re[0],re[1],re[2]));
+    h::global::bkBrush.reset(RGB(re[0],re[1],re[2]));
+    h::global::font.reset(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_FONT));
     while(GetMessage(&msg,NULL,0,0)){
         TranslateMessage(&msg);
         DispatchMessage(&msg);
