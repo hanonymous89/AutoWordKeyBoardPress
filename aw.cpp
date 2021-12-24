@@ -62,6 +62,7 @@ namespace h{
             constexpr auto LIST_GET_SELECT=LIST_PUSH+1;
             constexpr auto LIST_DELETE=LIST_GET_SELECT+1;
             constexpr auto LIST_GET_ITEM=LIST_DELETE+1;
+            constexpr auto LIST_GET_OBJ=LIST_GET_ITEM+1;
             constexpr auto SECTION_SHOW="SHOW";
             constexpr auto KEY_ALPHA="alpha";
             constexpr auto KEY_BK_COLOR="bk";
@@ -674,6 +675,9 @@ LRESULT CALLBACK listProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
             case h::constGlobalData::LIST_GET_ITEM:
             return (LONG)&data[hwnd].list[lp];
             break;
+            case h::constGlobalData::LIST_GET_OBJ:
+                return (LONG)&data[hwnd];
+            break;
             case h::constGlobalData::LIST_DELETE:
                 if(0>lp||data[hwnd].list.size()<=lp){
                     break;
@@ -761,6 +765,7 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
                 str+=h::getListStr(list,i)+CELEND;
             }
             GetWindowRect(hwnd,&rect);
+            str=h::vecToString(((struct h::listData*)(SendMessage(list,WM_COMMAND,h::constGlobalData::LIST_GET_OBJ,0)))->list,CELEND);
             h::INI(h::constGlobalData::SETTING_FILE)
             .editValue(SECTION_STRING,KEY_WORDLIST,str)
             .editValue(h::constGlobalData::SECTION_POS,MAINWINDOWNAME,h::vecToString(h::cast::toString(rect.left,rect.top,rect.right-rect.left,rect.bottom-rect.top)," "))
@@ -793,7 +798,6 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
                 list=CreateWindow(TEXT("SIMPLELIST"),TEXT(""),BS_PUSHBUTTON|WS_VISIBLE|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS|BS_MULTILINE,0,0,(rect.right/10)*8,rect.bottom/2,hwnd,NULL,LPCREATESTRUCT(lp)->hInstance,NULL);
                 SendMessage(list,WM_COMMAND,h::constGlobalData::LIST_SET,(LPARAM)&listData);
             }
-            // list=CreateWindow(TEXT("LISTBOX"),TEXT(KEY_WORDLIST),WS_HSCROLL|WS_VSCROLL|LBS_NOTIFY |WS_VISIBLE|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,0,0,(rect.right/10)*8,rect.bottom/2,hwnd,(HMENU)MSG2,(LPCREATESTRUCT(lp))->hInstance,NULL);
             edit=CreateWindow(TEXT("EDIT"),TEXT(""),ES_AUTOHSCROLL|ES_AUTOVSCROLL|WS_HSCROLL|WS_VSCROLL|WS_VISIBLE|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS|ES_MULTILINE|ES_WANTRETURN,0,rect.bottom/2,(rect.right/10)*8,rect.bottom/2,hwnd,NULL,LPCREATESTRUCT(lp)->hInstance,NULL);
             ofn.lStructSize=sizeof(OPENFILENAME);
             ofn.hwndOwner=hwnd;
@@ -825,30 +829,33 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
                     SendMessage(list,WM_COMMAND,h::constGlobalData::LIST_PUSH,(LPARAM)&str);
                 break;
                 case MSG3:
-                    // if(SendMessage(list,LB_GETCURSEL,0,0)==LB_ERR)break;
                     SendMessage(list,WM_COMMAND,h::constGlobalData::LIST_DELETE,SendMessage(list,WM_COMMAND,h::constGlobalData::LIST_GET_SELECT,0));
                 break;
                 case MSG2:
-                    // if(HIWORD(wp)==LBN_DBLCLK){
-                        // ((std::string*)SendMessage(list,WM_COMMAND,h::constGlobalData::LIST_GET_SELECT,0))->c_str()
                     h::pressKeyAll(h::stringToWstring(h::replaceAll(((std::string*)SendMessage(list,WM_COMMAND,h::constGlobalData::LIST_GET_ITEM,SendMessage(list,WM_COMMAND,h::constGlobalData::LIST_GET_SELECT,0)))->c_str(),REPLACE_ENTER,h::constGlobalData::ENTER)));
-                    // }
                     
                 break;
                 case FILEOPEN:
                     if(!GetOpenFileName(&ofn))break;
-                    if(MessageBox(hwnd,TEXT("reset?"),TEXT("Question"),MB_ICONQUESTION|MB_YESNO)==IDYES){
-                        SendMessage(list,LB_RESETCONTENT,0,0);
+                    {
+                    auto l=((struct h::listData*)(SendMessage(list,WM_COMMAND,h::constGlobalData::LIST_GET_OBJ,0)))->list;
+                    if(MessageBox(hwnd,TEXT("reset?"),TEXT("Question"),MB_ICONQUESTION|MB_YESNO)==IDNO){
+                            auto a=h::split(h::File(path).read().getContent(),CELEND);
+                            l.insert(l.end(),a.begin(),a.end());
                     }
-                    for(auto item:h::split(h::File(path).read().getContent(),CELEND)){
-                        SendMessage(list,LB_ADDSTRING,0,(LPARAM)item.c_str());
+                    else{
+                        l=h::split(h::File(path).read().getContent(),CELEND);
                     }
+                        ((struct h::listData*)(SendMessage(list,WM_COMMAND,h::constGlobalData::LIST_GET_OBJ,0)))->list=l;
+                    }
+                    InvalidateRect(list,NULL,TRUE);
+                    UpdateWindow(list);
                 break;
                 case FILESAVE:
                     if(!GetOpenFileName(&ofn))break;
-                    // for(int i=SendMessage(list,LB_GETCOUNT,0,0)-1;i>=0;--i){
-                    //     str+=h::getListStr(list,i)+CELEND;
-                    // }
+                    for(auto &item:((struct h::listData*)(SendMessage(list,WM_COMMAND,h::constGlobalData::LIST_GET_OBJ,0)))->list){
+                        str+=item+CELEND;
+                    }
                     h::File(path).write(str,MessageBox(hwnd,TEXT("reset?"),TEXT("Question"),MB_ICONQUESTION|MB_YESNO)==IDYES);
                 break;
                 case SHOWHELP:
