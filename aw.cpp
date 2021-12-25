@@ -8,6 +8,7 @@
 #include <unordered_map>
 #include <utility>
 #include <memory>
+#include <limits>
 #include <cmath>
 #include "rc.h"
 namespace h{
@@ -16,7 +17,7 @@ namespace h{
             static constexpr int R=0,G=R+1,B=G+1;
             T rgb[3];
         };  
-        template <class BT,class CT/*,class CCT*/>
+        template <class BT,class CT>
         class ObjectManager{
             protected:
             BT base;
@@ -27,14 +28,12 @@ namespace h{
             ObjectManager(){}
             ObjectManager(BT base):base(base){}
             virtual ~ObjectManager(){}
-            virtual BT &getBase()=0;//{return base}protected
+            virtual BT &getBase()=0;
             virtual CT &getCreated()=0;
             virtual void reset(BT base)=0;
-            // virtual CCT reset(BT base);
-            // virtual ObjectManager& reset(BT base)=0;
             
         };
-        class colorManager:private ObjectManager<COLORREF,HBRUSH/*,cm*/>{
+        class colorManager:private ObjectManager<COLORREF,HBRUSH>{
             private:
             void cr(COLORREF base) override{
                 this->base=base;
@@ -110,19 +109,30 @@ namespace h{
                            KEY_ALPHA="alpha",
                            KEY_BK_COLOR="bk",
                            KEY_BORDER_COLOR="border",
-                           KEY_FONT="font";
-            constexpr auto NUM_GET=100,
-                           NUM_SET=NUM_GET+1,
-                           NUM_SET_END=NUM_SET+1,
-                           NUM_CHANGE=NUM_SET_END+1,
-                           BTN_SET=1,
-                           LIST_SET=1,
-                           LIST_PUSH=LIST_SET+1,
-                           LIST_GET_SELECT=LIST_PUSH+1,
-                           LIST_DELETE=LIST_GET_SELECT+1,
-                           LIST_GET_ITEM=LIST_DELETE+1,
-                           LIST_GET_OBJ=LIST_GET_ITEM+1;
-            
+                           KEY_FONT="font",
+                           SCROLL_WINDOW="SCROLL",
+                           SIMPLEBTN_WINDOW="SIMPLEBTN",
+                           SIMPLELIST_WINDOW="SIMPLELIST",
+                           SETTING_WINDOW="SETTING";
+            enum SCROLL{
+                GET_SCROLL=100,
+                SET,
+                SET_END,
+                CHANGE,
+            };       
+            enum BTN{
+                SET_BTN=200
+            };           
+            enum LIST{
+                SET_LIST=300,
+                PUSH,
+                GET_SELECT_INDEX,
+                DELETE_ITEM,
+                GET_ITEM,
+                GET_OBJ
+            };                
+
+
         };
         namespace global{
             std::vector<HWND> hwnds;
@@ -131,29 +141,34 @@ namespace h{
                          bkBrush;
             fontManager font;
         };
+        inline std::string strUntil(std::string str,int until,int hash=0,std::string noMatch=""){
+        if(0>hash||until+hash>str.size())return noMatch;
+        return str.substr(hash,until);
+        }
+
         namespace cast{
         template <class T>
-        std::string toString(T str){
+        inline std::string toString(const T str)noexcept(true){
             return std::to_string(str);
         }
-        std::string toString(char str){
+        inline std::string toString(const char str)noexcept(true){
             return std::string(1,str);
         }
-        std::string toString(const char *str){
+        inline std::string toString(const char *str)noexcept(true){
             return std::string(str);
         }
-        std::string toString(std::string str){
+        inline std::string toString(const std::string str)noexcept(true){
             return str;
         }
         template <size_t N=0,class T>
-        auto toStringFor(std::vector<std::string> &vec,T tuple){
+        inline auto toStringFor(std::vector<std::string> &vec,const T tuple)noexcept(true){
             if constexpr(N<std::tuple_size<T>::value){
                 vec.push_back(toString(std::get<N>(tuple)));
                 toStringFor<N+1>(vec,tuple);
             }
         }
         template <class... T>
-        auto toString(T... str){
+        inline auto toString(const T... str)noexcept(true){
             std::tuple<T...> tuple{
                 std::make_tuple(str...)
             };
@@ -161,21 +176,28 @@ namespace h{
             toStringFor(vec,tuple);
             return vec;
         }
-
+        inline int customStoi(const std::string str) noexcept(false){
+            return std::stoi("0"+str);
+        }
+        inline int toInt(const std::string &str)noexcept(false){
+            const int maxLength=toString(std::numeric_limits<int>::max()).size()-1;
+            if(str.size()<=maxLength)return customStoi(str);
+            return customStoi(strUntil(str,maxLength));
+        }
     };
     template <class T>
-    inline auto absSub(T left,T right){
+    inline auto absSub(const T left,const T right)noexcept(true){
         return std::abs(left)-std::abs(right);
     }
     template <class T>
-    inline auto fitNum(T num,T left,T right){
+    inline auto fitNum(const T num,const T left,const T right)noexcept(true){
         return num-absSub(left,right);
     }
-    inline auto replaceAll(std::string str,std::string beforeStr,std::string afterStr){
+    inline auto replaceAll(const std::string str,const std::string beforeStr,const std::string afterStr)noexcept(true){
         return std::regex_replace(str,std::regex(beforeStr),afterStr);
     }
 
-    inline std::wstring stringToWstring(std::string str){
+    inline std::wstring stringToWstring(const std::string str)noexcept(true){
         const int BUFSIZE=MultiByteToWideChar(CP_ACP,0,str.c_str(),-1,(wchar_t*)NULL,0);
         std::unique_ptr<wchar_t> wtext(new wchar_t[BUFSIZE]);
         MultiByteToWideChar(CP_ACP,0,str.c_str(),-1,wtext.get(),BUFSIZE);
@@ -183,14 +205,14 @@ namespace h{
     }
 
 
-    inline auto pressKeyAll(std::wstring str){
+    inline auto pressKeyAll(const std::wstring str)noexcept(true){
         constexpr int DATACOUNT=1;
         constexpr int ENTERWIDE=L'\n';
         INPUT input;
         input.type=INPUT_KEYBOARD;
         input.ki.dwExtraInfo=input.ki.time=input.ki.wVk=0;
         for(auto &key:str){
-            if(key==ENTERWIDE){
+            if(key==ENTERWIDE){//key,tostring h::constglobaldata::enter
                 input.ki.wScan=VK_RETURN;
                 input.ki.wVk=MAKEWPARAM(VK_RETURN,0);
             }
@@ -205,7 +227,7 @@ namespace h{
         }
     }
     template <class T>
-    inline T customBool(bool check,T trueT,T falseT)noexcept(false){
+    inline T customBool(const bool check,const T trueT,const T falseT)noexcept(false){
         return check?trueT:falseT;
     }
     std::string &linkStr(std::string &str,const std::vector<std::string> array)noexcept(true){
@@ -215,12 +237,12 @@ namespace h{
         return str;
     }
     template <class... T>
-    std::string &linkStr(std::string &str,T... adds){
+    std::string &linkStr(std::string &str,const T... adds)noexcept(true){
         return linkStr(str,cast::toString(adds...));
     }
     
     template <class T>
-    inline T clip(T num,T min,T max){
+    inline T clip(const T num,const T min,const T max)noexcept(true){
         if(num<min)return min;
         else if(max<num)return max;
         return num;
@@ -233,20 +255,16 @@ namespace h{
         }
         return data;
     }
-    inline auto vecToString(std::vector<std::string> vec,std::string between=""){
+    inline auto vecToString( std::vector<std::string> vec, std::string between="")noexcept(true){
         std::string re;
         for(auto &str:vec){
             re+=str+between;
         }
         return re;
     }
-    inline std::string strUntil(std::string str,int until,int hash=0,std::string noMatch=""){
-        if(0>hash||until+hash>str.size())return noMatch;
-        return str.substr(hash,until);
-    }
 
     template <class MapType,class KeyType>
-    MapType &editKey(MapType &map,KeyType key,KeyType after)noexcept(false){
+    MapType &editKey(MapType &map, KeyType key, KeyType after)noexcept(false){
         auto node=map.extract(key);
         node.key()=after;
         map.insert(std::move(node));
@@ -257,16 +275,16 @@ namespace h{
         return map.count(key);
     }
     template <class T>
-    inline void noHitMapValueReplace(T &map,const typename T::key_type key,const typename T::mapped_type replace=typename T::mapped_type())noexcept(true){
+    inline void noHitMapValueReplace(T &map, typename T::key_type key, typename T::mapped_type replace=typename T::mapped_type()){
         if(!beMapItem(map,key))map.emplace(key,replace);
     }
-    inline auto getWindowStr(const HWND hwnd)noexcept(false){//
+    inline auto getWindowStr(const HWND hwnd)noexcept(false){
         const int BUFSIZE=GetWindowTextLength(hwnd)+1;
         std::unique_ptr<TCHAR> text(new TCHAR[BUFSIZE]);
         GetWindowText(hwnd,text.get(),BUFSIZE);
         return std::string(text.get(),text.get()+BUFSIZE-1);
     }
-    inline auto getListStr(const HWND list,const int id)noexcept(false){//
+    inline auto getListStr(const HWND list,const int id)noexcept(false){
         const int BUFSIZE=SendMessage(list,LB_GETTEXTLEN,id,0)+1;
         std::unique_ptr<TCHAR> text(new TCHAR[BUFSIZE]);
         SendMessage(list,LB_GETTEXT,id,(LPARAM)text.get());
@@ -277,7 +295,7 @@ namespace h{
         ADD,
         SUB
     };
-    inline void windowLong(HWND hwnd,UINT ws,int mode=modeOperator::EQUAL,bool Ex=false){
+    inline void windowLong(const HWND hwnd,UINT ws,const int mode=modeOperator::EQUAL,const bool Ex=false)noexcept(true){
         UINT style=Ex ? GWL_EXSTYLE:GWL_STYLE;
         switch(mode){
             case modeOperator::ADD:
@@ -290,7 +308,7 @@ namespace h{
         SetWindowLong(hwnd,style,ws);
     }
     template <class RT,class... T>
-    RT callFunction(RT (*function)(T...),T... arguments){
+    RT callFunction(const RT (*function)(T...),T... arguments)noexcept(true){
         return function(arguments...);
     }
     template <class getT>
@@ -303,14 +321,14 @@ namespace h{
             noHitMapValueReplace(map,key);
             return get(map.at(key),keys);
         }
-        typename getT::mapped_type &get(getT &map,std::vector<typename getT::key_type> keys){
+        typename getT::mapped_type &get(getT &map, std::vector<typename getT::key_type> keys){
             noHitMapValueReplace(map,keys[0]);
             return map.at(keys[0]);
         }
 
         template <class MapT,class... KeyT>
-        typename getT::mapped_type &get(MapT &map,KeyT... keys){
-            return get(map,std::vector<typename getT::key_type>{keys...});///
+        typename getT::mapped_type &get( MapT &map, KeyT... keys){
+            return get(map,std::vector<typename getT::key_type>{keys...});
         }
     };
     inline auto StrToInt(std::string str,int dataCount){
@@ -319,7 +337,7 @@ namespace h{
         std::smatch m{};
         for(auto &item:list){
             std::regex_search(str,m,std::regex(R"(\d+)"));
-            item=std::stoi("0"+m[0].str());
+            item=cast::toInt(m[0].str());
             str=m.suffix();
         }
         return list;
@@ -345,7 +363,7 @@ namespace h{
             content=std::string(std::istreambuf_iterator<char>(file),std::istreambuf_iterator<char>());
             return *this;
         }
-        inline auto write(std::string str,bool reset=false){
+        inline auto write(const std::string str,const bool reset=false) const noexcept(false){
             std::ofstream file(name,customBool(reset,std::ios_base::trunc,std::ios_base::app));
             file<<str;
             file.close();
@@ -384,17 +402,17 @@ namespace h{
         inline INI(const std::string name)noexcept(true):File(name){
             analysis();
         }
-        inline  auto changeFile(std::string name) noexcept(true) {
+        inline  auto changeFile(const std::string name) noexcept(true) {
             setName(name);
             analysis();
             return *this;
         }
         template<class T,class... KeyT>
-        inline typename T::mapped_type getData(KeyT... keys)noexcept(true){
+        inline typename T::mapped_type getData(const KeyT... keys) noexcept(true){
             return  mapManager<T>().get(data,std::vector<std::string>{keys...});
         }
         template <class T,class... KeyT>
-        inline auto deleteData(std::string delKey,KeyT... keys)noexcept(true){
+        inline auto deleteData(const std::string delKey,const KeyT... keys)  noexcept(true){
             mapManager<T>().get(data,keys...).erase(delKey);
             return *this;
         }
@@ -407,7 +425,7 @@ namespace h{
         inline  auto makeString(){
             std::string textData;
             for(auto &[section,line]:data){
-                linkStr(textData,SECTIONLEFT,section,SECTIONRIGHT,constGlobalData::ENTER);//似ている処理
+                linkStr(textData,SECTIONLEFT,section,SECTIONRIGHT,constGlobalData::ENTER);
                 for(auto &[key,value]:line){
                     linkStr(textData,key,EQUAL,value,constGlobalData::ENTER);
                 }
@@ -417,35 +435,6 @@ namespace h{
         inline const auto save(){
             replace(makeString(),true);
             return *this;
-        }
-    };
-
-    class RGBManager{
-        private:
-        RGB<int> rgb;
-        public:
-        inline RGBManager(RGB<int> rgb)noexcept(true):rgb(rgb){
-
-        }
-        inline RGBManager(){
-
-        }
-        inline auto set(std::string str){
-            for(auto obj:StrToInt(str,3)){
-                static int i=0;
-                rgb.rgb[i]=obj;
-            }
-            return *this;
-        }
-        inline auto &get(){
-            return rgb;
-        }
-        inline auto makeString(std::string between=" "){
-            std::string re;
-            for(auto &obj:rgb.rgb){
-                linkStr(re,obj,between);
-            }
-            return re;
         }
     };
     class ResizeManager{
@@ -503,7 +492,7 @@ namespace h{
     struct listData{
         std::vector<std::string> list;
         int active;
-        int oneHeight;//itemcount
+        int showItem;
         int msg;
         HWND scroll;
     };
@@ -544,6 +533,17 @@ LRESULT CALLBACK scrollProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         case WM_CREATE:
         data[hwnd];
         break;
+        case WM_LBUTTONDOWN:
+        // case WM_LBUTTONUP:
+        case WM_MOUSEMOVE:
+        data[hwnd].is_move=0>GetAsyncKeyState(VK_LBUTTON);
+        if(!data[hwnd].is_move){
+            break;
+        }
+        data[hwnd].now=MAKEPOINTS(lp).x;
+        InvalidateRect(hwnd,NULL,TRUE);
+        UpdateWindow(hwnd);
+        break;
         case WM_PAINT:
         GetClientRect(hwnd,&rect);
         hdc=BeginPaint(hwnd,&ps);
@@ -554,7 +554,7 @@ LRESULT CALLBACK scrollProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         {
             int nowc=data[hwnd].now/(static_cast<double>(rect.right)/data[hwnd].end);
             if(data[hwnd].nowc!=nowc&&GetParent(hwnd)!=NULL){
-            SendMessage(GetParent(hwnd),WM_COMMAND,h::constGlobalData::NUM_CHANGE,LPARAM(hwnd));
+            SendMessage(GetParent(hwnd),WM_COMMAND,h::constGlobalData::SCROLL::CHANGE,LPARAM(hwnd));
             }
             data[hwnd].nowc=nowc;
 
@@ -566,32 +566,19 @@ LRESULT CALLBACK scrollProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         SelectObject(hdc,defb);
         EndPaint(hwnd,&ps);
         break;
-        case WM_LBUTTONDOWN:
-        data[hwnd].is_move=true;
-        break;
-        case WM_LBUTTONUP:
-        data[hwnd].is_move=false;
-        break;
-        case WM_MOUSEMOVE:
-        if(!data[hwnd].is_move){
-            break;
-        }
-        data[hwnd].now=MAKEPOINTS(lp).x;
-        InvalidateRect(hwnd,NULL,TRUE);
-        UpdateWindow(hwnd);
-        break;
+
         case WM_COMMAND:
             switch(wp){
-                case h::constGlobalData::NUM_GET:
+                case h::constGlobalData::SCROLL::GET_SCROLL:
                 return data[hwnd].nowc;
-                case h::constGlobalData::NUM_SET:
+                case h::constGlobalData::SCROLL::SET:
                 data[hwnd].start=((struct h::scrollData*)lp)->start;
                 data[hwnd].end=((struct h::scrollData*)lp)->end;
                 data[hwnd].now=((struct h::scrollData*)lp)->now;
                 data[hwnd].is_move=((struct h::scrollData*)lp)->is_move;
                 data[hwnd].nowc=((struct h::scrollData*)lp)->nowc;
                 break;
-                case h::constGlobalData::NUM_SET_END:
+                case h::constGlobalData::SCROLL::SET_END:
                 data[hwnd].end=lp;
                 break;
             }
@@ -611,27 +598,27 @@ LRESULT CALLBACK settingProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     switch(msg){
         case WM_DESTROY:
             h::INI(h::constGlobalData::SETTING_FILE)
-            .editValue(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_ALPHA,h::cast::toString((int)SendMessage(alpha,WM_COMMAND,h::constGlobalData::NUM_GET,0)))
-            .editValue(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_BORDER_COLOR,h::vecToString(h::cast::toString(SendMessage(r,WM_COMMAND,h::constGlobalData::NUM_GET,0),SendMessage(g,WM_COMMAND,h::constGlobalData::NUM_GET,0),SendMessage(b,WM_COMMAND,h::constGlobalData::NUM_GET,0))," "))
-            .editValue(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_FONT,((std::string*)(SendMessage(fontList,WM_COMMAND,h::constGlobalData::LIST_GET_ITEM,SendMessage(fontList,WM_COMMAND,h::constGlobalData::LIST_GET_SELECT,0))))->c_str())
+            .editValue(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_ALPHA,h::cast::toString((int)SendMessage(alpha,WM_COMMAND,h::constGlobalData::SCROLL::GET_SCROLL,0)))
+            .editValue(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_BORDER_COLOR,h::vecToString(h::cast::toString(SendMessage(r,WM_COMMAND,h::constGlobalData::SCROLL::GET_SCROLL,0),SendMessage(g,WM_COMMAND,h::constGlobalData::SCROLL::GET_SCROLL,0),SendMessage(b,WM_COMMAND,h::constGlobalData::SCROLL::GET_SCROLL,0))," "))
+            .editValue(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_FONT,((std::string*)(SendMessage(fontList,WM_COMMAND,h::constGlobalData::LIST::GET_ITEM,SendMessage(fontList,WM_COMMAND,h::constGlobalData::LIST::GET_SELECT_INDEX,0))))->c_str())
             .save();
         break;
         case WM_CREATE:
         GetClientRect(hwnd,&rect);
-        alpha=CreateWindowEx(WS_EX_TOPMOST,TEXT("SCROLL"),TEXT("Alpha"),WS_CHILD|WS_VISIBLE|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,0,0,rect.right/2,rect.bottom/5,hwnd,NULL,LPCREATESTRUCT(lp)->hInstance,NULL);
-        r=CreateWindowEx(WS_EX_TOPMOST,TEXT("SCROLL"),TEXT("r"),WS_CHILD|WS_VISIBLE|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,0,rect.bottom/5,rect.right/2,rect.bottom/5,hwnd,NULL,LPCREATESTRUCT(lp)->hInstance,NULL);
-        g=CreateWindowEx(WS_EX_TOPMOST,TEXT("SCROLL"),TEXT("g"),WS_CHILD|WS_VISIBLE|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,0,(rect.bottom/5)*2,rect.right/2,rect.bottom/5,hwnd,NULL,LPCREATESTRUCT(lp)->hInstance,NULL);
-        b=CreateWindowEx(WS_EX_TOPMOST,TEXT("SCROLL"),TEXT("b"),WS_CHILD|WS_VISIBLE|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,0,(rect.bottom/5)*3,rect.right/2,rect.bottom/5,hwnd,NULL,LPCREATESTRUCT(lp)->hInstance,NULL);
-        fontList=CreateWindow(TEXT("SIMPLELIST"),TEXT(""),WS_CHILD|WS_VISIBLE|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,rect.right/2,0,rect.right/2,rect.bottom/5*4,hwnd,NULL,LPCREATESTRUCT(lp)->hInstance,NULL);
+        alpha=CreateWindowEx(WS_EX_TOPMOST,TEXT(h::constGlobalData::SCROLL_WINDOW),TEXT("Alpha"),WS_CHILD|WS_VISIBLE|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,0,0,rect.right/2,rect.bottom/5,hwnd,NULL,LPCREATESTRUCT(lp)->hInstance,NULL);
+        r=CreateWindowEx(WS_EX_TOPMOST,TEXT(h::constGlobalData::SCROLL_WINDOW),TEXT("r"),WS_CHILD|WS_VISIBLE|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,0,rect.bottom/5,rect.right/2,rect.bottom/5,hwnd,NULL,LPCREATESTRUCT(lp)->hInstance,NULL);
+        g=CreateWindowEx(WS_EX_TOPMOST,TEXT(h::constGlobalData::SCROLL_WINDOW),TEXT("g"),WS_CHILD|WS_VISIBLE|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,0,(rect.bottom/5)*2,rect.right/2,rect.bottom/5,hwnd,NULL,LPCREATESTRUCT(lp)->hInstance,NULL);
+        b=CreateWindowEx(WS_EX_TOPMOST,TEXT(h::constGlobalData::SCROLL_WINDOW),TEXT("b"),WS_CHILD|WS_VISIBLE|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,0,(rect.bottom/5)*3,rect.right/2,rect.bottom/5,hwnd,NULL,LPCREATESTRUCT(lp)->hInstance,NULL);
+        fontList=CreateWindow(TEXT(h::constGlobalData::SIMPLELIST_WINDOW),TEXT(""),WS_CHILD|WS_VISIBLE|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,rect.right/2,0,rect.right/2,rect.bottom/5*4,hwnd,NULL,LPCREATESTRUCT(lp)->hInstance,NULL);
         {
             h::scrollData data{0,255,0,0,false};
-            SendMessage(alpha,WM_COMMAND,h::constGlobalData::NUM_SET,(LPARAM)&data);
-            SendMessage(r,WM_COMMAND,h::constGlobalData::NUM_SET,(LPARAM)&data);
-            SendMessage(g,WM_COMMAND,h::constGlobalData::NUM_SET,(LPARAM)&data);
-            SendMessage(b,WM_COMMAND,h::constGlobalData::NUM_SET,(LPARAM)&data);
-            h::listData listData{{},0,10,MSG1,NULL};//
+            SendMessage(alpha,WM_COMMAND,h::constGlobalData::SCROLL::SET,(LPARAM)&data);
+            SendMessage(r,WM_COMMAND,h::constGlobalData::SCROLL::SET,(LPARAM)&data);
+            SendMessage(g,WM_COMMAND,h::constGlobalData::SCROLL::SET,(LPARAM)&data);
+            SendMessage(b,WM_COMMAND,h::constGlobalData::SCROLL::SET,(LPARAM)&data);
+            h::listData listData{{},0,10,MSG1,NULL};
             h::setFontList(&listData.list);
-            SendMessage(fontList,WM_COMMAND,h::constGlobalData::LIST_SET,LPARAM(&listData));           
+            SendMessage(fontList,WM_COMMAND,h::constGlobalData::LIST::SET_LIST,LPARAM(&listData));           
             
         }
         h::global::hwnds.clear();
@@ -641,7 +628,7 @@ LRESULT CALLBACK settingProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         case WM_PAINT:
         GetClientRect(hwnd,&rect);
         hdc=BeginPaint(hwnd,&ps);
-        colorb=CreateSolidBrush(RGB(SendMessage(r,WM_COMMAND,h::constGlobalData::NUM_GET,0),SendMessage(g,WM_COMMAND,h::constGlobalData::NUM_GET,0),SendMessage(b,WM_COMMAND,h::constGlobalData::NUM_GET,0)));
+        colorb=CreateSolidBrush(RGB(SendMessage(r,WM_COMMAND,h::constGlobalData::SCROLL::GET_SCROLL,0),SendMessage(g,WM_COMMAND,h::constGlobalData::SCROLL::GET_SCROLL,0),SendMessage(b,WM_COMMAND,h::constGlobalData::SCROLL::GET_SCROLL,0)));
         defb=(HBRUSH)SelectObject(hdc,colorb);
         FrameRect(hdc,&rect,colorb);
         SelectObject(hdc,defb);
@@ -653,8 +640,8 @@ LRESULT CALLBACK settingProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         break;
         case WM_COMMAND:
             switch(wp){
-                case h::constGlobalData::NUM_CHANGE:
-                    if(HWND(lp)!=alpha){//not rgb
+                case h::constGlobalData::SCROLL::CHANGE:
+                    if(HWND(lp)!=alpha){
                         InvalidateRect(hwnd,NULL,TRUE);
                         UpdateWindow(hwnd);
                     }
@@ -669,6 +656,7 @@ LRESULT CALLBACK settingProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
 
 LRESULT CALLBACK listProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     static std::unordered_map<HWND,h::listData> data;
+    static std::string str;
     RECT rect;
     HDC hdc;
     PAINTSTRUCT ps;
@@ -679,8 +667,8 @@ LRESULT CALLBACK listProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         break;
         case WM_LBUTTONDOWN:
         GetClientRect(hwnd,&rect);
-        oneSize=static_cast<double>(rect.bottom)/data[hwnd].oneHeight;
-        data[hwnd].active=(MAKEPOINTS(lp).y/oneSize)+SendMessage(data[hwnd].scroll,WM_COMMAND,h::constGlobalData::NUM_GET,0)-1;//crash 0/n
+        oneSize=static_cast<double>(rect.bottom)/data[hwnd].showItem;
+        data[hwnd].active=(MAKEPOINTS(lp).y/oneSize)+SendMessage(data[hwnd].scroll,WM_COMMAND,h::constGlobalData::SCROLL::GET_SCROLL,0)-1;
         InvalidateRect(hwnd,NULL,TRUE);
         UpdateWindow(hwnd);
         break;
@@ -694,9 +682,9 @@ LRESULT CALLBACK listProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         SetTextColor(hdc,h::global::borderBrush.getBase());
         SetBkColor(hdc,h::global::bkBrush.getBase());
         {
-            oneSize=static_cast<double>(rect.bottom)/data[hwnd].oneHeight;
+            oneSize=static_cast<double>(rect.bottom)/data[hwnd].showItem;
             SelectObject(hdc,h::global::font.setHeight(oneSize).getCreated());
-            for(int hash=SendMessage(data[hwnd].scroll,WM_COMMAND,h::constGlobalData::NUM_GET,0),i=1,end=static_cast<double>(rect.bottom)/oneSize;hash<data[hwnd].list.size()&&i<end;++hash,++i){
+            for(int hash=SendMessage(data[hwnd].scroll,WM_COMMAND,h::constGlobalData::SCROLL::GET_SCROLL,0),i=1,end=static_cast<double>(rect.bottom)/oneSize;hash<data[hwnd].list.size()&&i<end;++hash,++i){
                 if(hash==data[hwnd].active){
                     SetTextColor(hdc,h::global::bkBrush.getBase());
                     SetBkColor(hdc,h::global::borderBrush.getBase());
@@ -708,7 +696,6 @@ LRESULT CALLBACK listProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
                 TextOut(hdc,0,oneSize*i,data[hwnd].list[hash].c_str(),data[hwnd].list[hash].size());
             }
             SelectObject(hdc,GetStockObject(SYSTEM_FONT));
-            // DeleteObject(font);
         }
         for(int i=0,max=oneSize;i<max;++i){
             RECT item{
@@ -723,48 +710,51 @@ LRESULT CALLBACK listProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         break;
         case WM_COMMAND:
         switch(wp){
-            case h::constGlobalData::LIST_SET:
+            case h::constGlobalData::LIST::SET_LIST:
             data[hwnd].active=((struct h::listData*)lp)->active;
             data[hwnd].list=((struct h::listData*)lp)->list;
-            data[hwnd].oneHeight=((struct h::listData*)lp)->oneHeight;
+            data[hwnd].showItem=((struct h::listData*)lp)->showItem;
             data[hwnd].msg=((struct h::listData*)lp)->msg;
             {
                 GetClientRect(hwnd,&rect);
-                oneSize=static_cast<double>(rect.bottom)/data[hwnd].oneHeight;
+                oneSize=static_cast<double>(rect.bottom)/data[hwnd].showItem;
                 if(data[hwnd].scroll==NULL)
-                data[hwnd].scroll=CreateWindowEx(WS_EX_TOPMOST,TEXT("SCROLL"),TEXT("Height"),WS_CHILD|WS_VISIBLE|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,0,0,rect.right,oneSize,hwnd,NULL,(HINSTANCE)GetModuleHandle(0),NULL);
+                data[hwnd].scroll=CreateWindowEx(WS_EX_TOPMOST,TEXT(h::constGlobalData::SCROLL_WINDOW),TEXT("Height"),WS_CHILD|WS_VISIBLE|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,0,0,rect.right,oneSize,hwnd,NULL,(HINSTANCE)GetModuleHandle(0),NULL);
                 h::scrollData scrollData{0,static_cast<int>(data[hwnd].list.size()),0,0,false};
-                SendMessage(data[hwnd].scroll,WM_COMMAND,h::constGlobalData::NUM_SET,(LPARAM)&scrollData);
+                SendMessage(data[hwnd].scroll,WM_COMMAND,h::constGlobalData::SCROLL::SET,(LPARAM)&scrollData);
             }
             break;
-            case h::constGlobalData::LIST_PUSH:
+            case h::constGlobalData::LIST::PUSH:
                 data[hwnd].list.push_back(((std::string*)lp)->c_str());
-                SendMessage(data[hwnd].scroll,WM_COMMAND,h::constGlobalData::NUM_SET_END,data[hwnd].list.size());
+                SendMessage(data[hwnd].scroll,WM_COMMAND,h::constGlobalData::SCROLL::SET_END,data[hwnd].list.size());
                 InvalidateRect(hwnd,NULL,TRUE);
                 UpdateWindow(hwnd);
             break;
-            case h::constGlobalData::LIST_GET_SELECT:
+            case h::constGlobalData::LIST::GET_SELECT_INDEX:
                 if(0>data[hwnd].active||data[hwnd].list.size()<=data[hwnd].active){
                     return (LONG)0;
                 }
                 return (LONG)data[hwnd].active;
             break;
-            case h::constGlobalData::LIST_GET_ITEM:
+            case h::constGlobalData::LIST::GET_ITEM:
+                if(0>data[hwnd].active||data[hwnd].list.size()<=data[hwnd].active){
+                    return (LONG)&str;
+                }
             return (LONG)&data[hwnd].list[lp];
             break;
-            case h::constGlobalData::LIST_GET_OBJ:
+            case h::constGlobalData::LIST::GET_OBJ:
                 return (LONG)&data[hwnd];
             break;
-            case h::constGlobalData::LIST_DELETE:
+            case h::constGlobalData::LIST::DELETE_ITEM:
                 if(0>lp||data[hwnd].list.size()<=lp){
                     break;
                 }
                 data[hwnd].list.erase(data[hwnd].list.begin()+lp);
-                SendMessage(data[hwnd].scroll,WM_COMMAND,h::constGlobalData::NUM_SET_END,data[hwnd].list.size());
+                SendMessage(data[hwnd].scroll,WM_COMMAND,h::constGlobalData::SCROLL::SET_END,data[hwnd].list.size());
                 InvalidateRect(hwnd,NULL,TRUE);
                 UpdateWindow(hwnd);
             break;
-            case h::constGlobalData::NUM_CHANGE:
+            case h::constGlobalData::SCROLL::CHANGE:
                 InvalidateRect(hwnd,NULL,TRUE);
                 UpdateWindow(hwnd);
             break;
@@ -795,12 +785,15 @@ LRESULT CALLBACK btnProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         if(GetParent(hwnd)==NULL)break;
         SendMessage(GetParent(hwnd),WM_COMMAND,MAKEWPARAM(data[hwnd].msg,data[hwnd].msg),0);
         break;
+
         case WM_PAINT:
         GetClientRect(hwnd,&rect);
         hdc=BeginPaint(hwnd,&ps);
+        {
         SetTextColor(hdc,h::customBool(data[hwnd].flag,h::global::bkBrush.getBase(),h::global::borderBrush.getBase()));
         SetBkColor(hdc,h::customBool(data[hwnd].flag,h::global::borderBrush.getBase(),h::global::bkBrush.getBase()));
         defb=HBRUSH(SelectObject(hdc,h::customBool(data[hwnd].flag,h::global::borderBrush.getCreated(),h::global::bkBrush.getCreated())));
+        }
         Rectangle(hdc,0,0,rect.right,rect.bottom);
         SelectObject(hdc,h::global::font.setHeight(rect.bottom).getCreated());
         DrawText(hdc,h::getWindowStr(hwnd).c_str(),-1,&rect,DT_CENTER|DT_WORDBREAK|DT_VCENTER);
@@ -810,7 +803,7 @@ LRESULT CALLBACK btnProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         break;
         case WM_COMMAND:
         switch(wp){
-            case h::constGlobalData::BTN_SET:
+            case h::constGlobalData::BTN::SET_BTN:
             data[hwnd].flag=((struct h::btnData*)lp)->flag;    
             data[hwnd].msg=((struct h::btnData*)lp)->msg;
             break;
@@ -822,14 +815,16 @@ LRESULT CALLBACK btnProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
 
 
 LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
-    constexpr int MSG1=1,
-                  MSG2=MSG1+1,
-                  MSG3=MSG2+1;
+    enum MSG{
+        Add=10,
+        Sub,
+        LIST_DBK
+    };
     constexpr auto CELEND="[CELEND]",
-                   REPLACE_ENTER="[ENTER]";
-    constexpr auto SECTION_STRING="STRING";
-    constexpr auto KEY_WORDLIST="wordList";
-    constexpr auto HELPHTML="EasyHelp.html";
+                   REPLACE_ENTER="[ENTER]",
+                   SECTION_STRING="STRING",
+                   KEY_WORDLIST="wordList",
+                   HELPHTML="EasyHelp.html";
     static HWND list,
                 edit;
     static OPENFILENAME ofn{0};
@@ -843,7 +838,7 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         case WM_DESTROY:
             GetWindowRect(hwnd,&rect);
             h::INI(h::constGlobalData::SETTING_FILE)
-            .editValue(SECTION_STRING,KEY_WORDLIST,h::vecToString(((struct h::listData*)(SendMessage(list,WM_COMMAND,h::constGlobalData::LIST_GET_OBJ,0)))->list,CELEND))
+            .editValue(SECTION_STRING,KEY_WORDLIST,h::vecToString(((struct h::listData*)(SendMessage(list,WM_COMMAND,h::constGlobalData::LIST::GET_OBJ,0)))->list,CELEND))
             .editValue(h::constGlobalData::SECTION_POS,MAINWINDOWNAME,h::vecToString(h::cast::toString(rect.left,rect.top,rect.right-rect.left,rect.bottom-rect.top)," "))
             .save();
             PostQuitMessage(0);
@@ -866,13 +861,13 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
             SetLayeredWindowAttributes(hwnd,RGB(0,1,0),h::StrToInt(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_ALPHA),1)[0],LWA_ALPHA);
             GetClientRect(hwnd,&rect);
             {
-                h::btnData btnData{false,MSG1};
-                SendMessage(CreateWindow(TEXT("SIMPLEBTN"),TEXT("Add"),BS_PUSHBUTTON|WS_VISIBLE|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS|BS_MULTILINE,(rect.right/10)*8,0,(rect.right/10)*2,rect.bottom/2,hwnd,(HMENU)MSG1,LPCREATESTRUCT(lp)->hInstance,NULL),WM_COMMAND,h::constGlobalData::BTN_SET,(LPARAM)&btnData);
-                btnData.msg=MSG3;
-                SendMessage(CreateWindow(TEXT("SIMPLEBTN"),TEXT("Sub"),BS_PUSHBUTTON|WS_VISIBLE|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS|BS_MULTILINE,(rect.right/10)*8,rect.bottom/2,(rect.right/10)*2,rect.bottom/2,hwnd,(HMENU)MSG3,LPCREATESTRUCT(lp)->hInstance,NULL),WM_COMMAND,h::constGlobalData::BTN_SET,(LPARAM)&btnData);
-                h::listData listData{h::split(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(SECTION_STRING,KEY_WORDLIST),CELEND),0,10,MSG2,NULL};//
-                list=CreateWindow(TEXT("SIMPLELIST"),TEXT(""),BS_PUSHBUTTON|WS_VISIBLE|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS|BS_MULTILINE,0,0,(rect.right/10)*8,rect.bottom/2,hwnd,NULL,LPCREATESTRUCT(lp)->hInstance,NULL);
-                SendMessage(list,WM_COMMAND,h::constGlobalData::LIST_SET,(LPARAM)&listData);
+                h::btnData btnData{false,MSG::Add};
+                SendMessage(CreateWindow(TEXT(h::constGlobalData::SIMPLEBTN_WINDOW),TEXT("Add"),BS_PUSHBUTTON|WS_VISIBLE|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS|BS_MULTILINE,(rect.right/10)*8,0,(rect.right/10)*2,rect.bottom/2,hwnd,(HMENU)MSG::Add,LPCREATESTRUCT(lp)->hInstance,NULL),WM_COMMAND,h::constGlobalData::BTN::SET_BTN,(LPARAM)&btnData);
+                btnData.msg=MSG::LIST_DBK;
+                SendMessage(CreateWindow(TEXT(h::constGlobalData::SIMPLEBTN_WINDOW),TEXT("Sub"),BS_PUSHBUTTON|WS_VISIBLE|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS|BS_MULTILINE,(rect.right/10)*8,rect.bottom/2,(rect.right/10)*2,rect.bottom/2,hwnd,(HMENU)MSG::LIST_DBK,LPCREATESTRUCT(lp)->hInstance,NULL),WM_COMMAND,h::constGlobalData::BTN::SET_BTN,(LPARAM)&btnData);
+                h::listData listData{h::split(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(SECTION_STRING,KEY_WORDLIST),CELEND),0,10,MSG::Sub,NULL};
+                list=CreateWindow(TEXT(h::constGlobalData::SIMPLELIST_WINDOW),TEXT(""),BS_PUSHBUTTON|WS_VISIBLE|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS|BS_MULTILINE,0,0,(rect.right/10)*8,rect.bottom/2,hwnd,NULL,LPCREATESTRUCT(lp)->hInstance,NULL);
+                SendMessage(list,WM_COMMAND,h::constGlobalData::LIST::SET_LIST,(LPARAM)&listData);
             }
             edit=CreateWindow(TEXT("EDIT"),TEXT(""),ES_AUTOHSCROLL|ES_AUTOVSCROLL|WS_HSCROLL|WS_VSCROLL|WS_VISIBLE|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS|ES_MULTILINE|ES_WANTRETURN,0,rect.bottom/2,(rect.right/10)*8,rect.bottom/2,hwnd,NULL,LPCREATESTRUCT(lp)->hInstance,NULL);
             ofn.lStructSize=sizeof(OPENFILENAME);
@@ -885,6 +880,14 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
             EnumChildWindows(hwnd,addGlobalHwndsChild,0);
             rm=std::move(h::ResizeManager(hwnd,h::global::hwnds));
         break;
+        // case WM_ACTIVATE:
+        // case WM_NCPAINT:
+        // case WM_NCACTIVATE:
+        // hdc=GetWindowDC(hwnd);
+        // SelectObject(hdc,h::global::borderBrush.getCreated());
+        
+        // ReleaseDC(hwnd,hdc);
+        // break;
         case WM_SIZE:
             rm.resize();
         break;
@@ -900,21 +903,21 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         break;
         case WM_COMMAND:
             switch(LOWORD(wp)){
-                case MSG1:
+                case MSG::Add:
                     str=h::replaceAll(h::getWindowStr(edit),"\r\n",REPLACE_ENTER);
-                    SendMessage(list,WM_COMMAND,h::constGlobalData::LIST_PUSH,(LPARAM)&str);
+                    SendMessage(list,WM_COMMAND,h::constGlobalData::LIST::PUSH,(LPARAM)&str);
                 break;
-                case MSG3:
-                    SendMessage(list,WM_COMMAND,h::constGlobalData::LIST_DELETE,SendMessage(list,WM_COMMAND,h::constGlobalData::LIST_GET_SELECT,0));
+                case MSG::LIST_DBK:
+                    SendMessage(list,WM_COMMAND,h::constGlobalData::LIST::DELETE_ITEM,SendMessage(list,WM_COMMAND,h::constGlobalData::LIST::GET_SELECT_INDEX,0));
                 break;
-                case MSG2:
-                    h::pressKeyAll(h::stringToWstring(h::replaceAll(((std::string*)SendMessage(list,WM_COMMAND,h::constGlobalData::LIST_GET_ITEM,SendMessage(list,WM_COMMAND,h::constGlobalData::LIST_GET_SELECT,0)))->c_str(),REPLACE_ENTER,h::constGlobalData::ENTER)));
+                case MSG::Sub:
+                    h::pressKeyAll(h::stringToWstring(h::replaceAll(((std::string*)SendMessage(list,WM_COMMAND,h::constGlobalData::LIST::GET_ITEM,SendMessage(list,WM_COMMAND,h::constGlobalData::LIST::GET_SELECT_INDEX,0)))->c_str(),REPLACE_ENTER,h::constGlobalData::ENTER)));
                     
                 break;
                 case FILEOPEN:
                     if(!GetOpenFileName(&ofn))break;
                     {
-                    auto l=((struct h::listData*)(SendMessage(list,WM_COMMAND,h::constGlobalData::LIST_GET_OBJ,0)))->list;
+                    auto l=((struct h::listData*)(SendMessage(list,WM_COMMAND,h::constGlobalData::LIST::GET_OBJ,0)))->list;
                     if(MessageBox(hwnd,TEXT("reset?"),TEXT("Question"),MB_ICONQUESTION|MB_YESNO)==IDNO){
                             auto a=h::split(h::File(path).read().getContent(),CELEND);
                             l.insert(l.end(),a.begin(),a.end());
@@ -922,14 +925,14 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
                     else{
                         l=h::split(h::File(path).read().getContent(),CELEND);
                     }
-                        ((struct h::listData*)(SendMessage(list,WM_COMMAND,h::constGlobalData::LIST_GET_OBJ,0)))->list=l;
+                        ((struct h::listData*)(SendMessage(list,WM_COMMAND,h::constGlobalData::LIST::GET_OBJ,0)))->list=l;
                     }
                     InvalidateRect(list,NULL,TRUE);
                     UpdateWindow(list);
                 break;
                 case FILESAVE:
                     if(!GetOpenFileName(&ofn))break;
-                    h::File(path).write(h::vecToString(((struct h::listData*)(SendMessage(list,WM_COMMAND,h::constGlobalData::LIST_GET_OBJ,0)))->list,CELEND),MessageBox(hwnd,TEXT("reset?"),TEXT("Question"),MB_ICONQUESTION|MB_YESNO)==IDYES);
+                    h::File(path).write(h::vecToString(((struct h::listData*)(SendMessage(list,WM_COMMAND,h::constGlobalData::LIST::GET_OBJ,0)))->list,CELEND),MessageBox(hwnd,TEXT("reset?"),TEXT("Question"),MB_ICONQUESTION|MB_YESNO)==IDYES);
                 break;
                 case SHOWHELP:
                     if(!std::filesystem::exists(HELPHTML))h::File(HELPHTML).write(
@@ -938,7 +941,7 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
                     system(std::filesystem::absolute(HELPHTML).string().c_str());
                 break;
                 case OPENSETTING:
-                    CreateWindow(TEXT("SETTING"),TEXT("setting"),WS_VISIBLE|WS_OVERLAPPEDWINDOW|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,CW_USEDEFAULT,CW_USEDEFAULT,CW_USEDEFAULT,CW_USEDEFAULT,NULL,NULL,(HINSTANCE)GetModuleHandle(0),NULL);
+                    CreateWindow(TEXT(h::constGlobalData::SETTING_WINDOW),TEXT(h::constGlobalData::SETTING_WINDOW),WS_VISIBLE|WS_OVERLAPPEDWINDOW|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,CW_USEDEFAULT,CW_USEDEFAULT,CW_USEDEFAULT,CW_USEDEFAULT,NULL,NULL,(HINSTANCE)GetModuleHandle(0),NULL);
                 break;
             }
         break;
@@ -947,19 +950,24 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
 }
 int WINAPI WinMain(HINSTANCE hInstance,HINSTANCE hPrevInstance,PSTR lpCmdLine,int nCmdShow){
     constexpr auto MAIN_WINDOW_CLASS="MAIN";
-    constexpr auto X=0,Y=1,WIDTH=2,HEIGHT=3;
+    enum POS{
+        X,Y,WIDTH,HEIGHT
+    };
+    enum RGB{
+        R,G,B
+    };
     MSG msg;
     h::baseStyle(WndProc,MAIN_WINDOW_CLASS);
-    h::baseStyle(scrollProc,"SCROLL");
-    h::baseStyle(settingProc,"SETTING");
-    h::baseStyle(btnProc,"SIMPLEBTN");
-    h::baseStyle(listProc,"SIMPLELIST");
+    h::baseStyle(scrollProc,h::constGlobalData::SCROLL_WINDOW);
+    h::baseStyle(settingProc,h::constGlobalData::SETTING_WINDOW);
+    h::baseStyle(btnProc,h::constGlobalData::SIMPLEBTN_WINDOW);
+    h::baseStyle(listProc,h::constGlobalData::SIMPLELIST_WINDOW);
     auto re=h::StrToInt(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(h::constGlobalData::SECTION_POS,MAINWINDOWNAME),4);
-    SendMessage(CreateWindowEx(WS_EX_TOPMOST|WS_EX_LAYERED,TEXT(MAIN_WINDOW_CLASS),TEXT(h::constGlobalData::MODE_INPUT),WS_CLIPCHILDREN|WS_VISIBLE|WS_OVERLAPPEDWINDOW,re[X],re[Y],re[WIDTH],re[HEIGHT],NULL,LoadMenu(hInstance,h::constGlobalData::MAINMENU),hInstance,NULL),WM_SETICON,ICON_BIG,(LPARAM)LoadIcon(hInstance,h::constGlobalData::ICON_NAME));
+    SendMessage(CreateWindowEx(WS_EX_TOPMOST|WS_EX_LAYERED,TEXT(MAIN_WINDOW_CLASS),TEXT(h::constGlobalData::MODE_INPUT),WS_CLIPCHILDREN|WS_VISIBLE|WS_OVERLAPPEDWINDOW,re[POS::X],re[POS::Y],re[POS::WIDTH],re[POS::HEIGHT],NULL,LoadMenu(hInstance,h::constGlobalData::MAINMENU),hInstance,NULL),WM_SETICON,ICON_BIG,(LPARAM)LoadIcon(hInstance,h::constGlobalData::ICON_NAME));
     re=h::StrToInt(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_BORDER_COLOR),3);
-    h::global::borderBrush.reset(RGB(re[0],re[1],re[2]));
+    h::global::borderBrush.reset(RGB(re[RGB::R],re[RGB::G],re[RGB::B]));
     re=h::StrToInt(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_BK_COLOR),3);
-    h::global::bkBrush.reset(RGB(re[0],re[1],re[2]));
+    h::global::bkBrush.reset(RGB(re[RGB::R],re[RGB::G],re[RGB::B]));
     h::global::font.reset(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_FONT));
     while(GetMessage(&msg,NULL,0,0)){
         TranslateMessage(&msg);
@@ -967,3 +975,4 @@ int WINAPI WinMain(HINSTANCE hInstance,HINSTANCE hPrevInstance,PSTR lpCmdLine,in
     }
     return msg.wParam;
 }
+//getwindowdc
