@@ -93,6 +93,7 @@ namespace h{
             }
             auto &setHeight(decltype(height) height){
                 this->height=height;
+                reset(base);
                 return *this;
             }
         };
@@ -795,7 +796,7 @@ LRESULT CALLBACK btnProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         defb=HBRUSH(SelectObject(hdc,h::customBool(data[hwnd].flag,h::global::borderBrush.getCreated(),h::global::bkBrush.getCreated())));
         }
         Rectangle(hdc,0,0,rect.right,rect.bottom);
-        SelectObject(hdc,h::global::font.setHeight(rect.bottom).getCreated());
+        SelectObject(hdc,h::global::font.setHeight(rect.bottom/2).getCreated());
         DrawText(hdc,h::getWindowStr(hwnd).c_str(),-1,&rect,DT_CENTER|DT_WORDBREAK|DT_VCENTER);
         FrameRect(hdc,&rect,h::global::borderBrush.getCreated());
         SelectObject(hdc,defb);
@@ -820,28 +821,37 @@ namespace h{
 };
 
 VOID CALLBACK resizeRBProc(HWND hwnd , UINT uMsg ,UINT idEvent , DWORD dwTime) {
+    if(0<=GetAsyncKeyState(VK_LBUTTON)){
+        KillTimer(hwnd,idEvent);
+    }
     POINT pos;
     GetCursorPos(&pos);
     MoveWindow(hwnd,h::global::now.x,h::global::now.y,pos.x-h::global::now.x+1,pos.y-h::global::now.y+1,TRUE);
 }
 VOID CALLBACK resizeLTProc(HWND hwnd , UINT uMsg ,UINT idEvent , DWORD dwTime) {
+    if(0<=GetAsyncKeyState(VK_LBUTTON)){
+        KillTimer(hwnd,idEvent);
+    }
     POINT pos;
     GetCursorPos(&pos);
-    MoveWindow(hwnd,pos.x-1,pos.y-1,h::global::now.x-pos.x,h::global::now.y-pos.y,TRUE);
+    MoveWindow(hwnd,pos.x,pos.y,h::global::now.x-pos.x,h::global::now.y-pos.y,TRUE);
 }
 VOID CALLBACK moveProc(HWND hwnd , UINT uMsg ,UINT idEvent , DWORD dwTime) {
+    if(0<=GetAsyncKeyState(VK_LBUTTON)){
+        KillTimer(hwnd,idEvent);
+    }
     POINT pos;
     GetCursorPos(&pos);
     MoveWindow(hwnd,pos.x-h::global::hash.x,pos.y-h::global::hash.y,h::global::now.x,h::global::now.y,TRUE);
 }
-void drawBorder(HWND hwnd){
-    PAINTSTRUCT ps;
-    RECT rect;
-    GetClientRect(hwnd,&rect);
-    auto hdc=BeginPaint(hwnd,&ps);
-    FrameRect(hdc,&rect,h::global::borderBrush.getCreated());
-    EndPaint(hwnd,&ps);
-}
+// void drawBorder(HWND hwnd){
+//     PAINTSTRUCT ps;
+//     RECT rect;
+//     GetClientRect(hwnd,&rect);
+//     auto hdc=BeginPaint(hwnd,&ps);
+//     FrameRect(hdc,&rect,h::global::borderBrush.getCreated());
+//     EndPaint(hwnd,&ps);
+// }
 LRESULT CALLBACK titleProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     RECT rect;
     PAINTSTRUCT ps;
@@ -869,14 +879,10 @@ LRESULT CALLBACK titleProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         h::global::now.y=rect.bottom-rect.top;
         SetTimer(GetParent(hwnd),MOVEID,100,moveProc);
         break;
-        case WM_LBUTTONUP:
-            if(GetParent(hwnd)==NULL)break;
-            KillTimer(GetParent(hwnd),MOVEID);
-        break;
         case WM_PAINT:
-        drawBorder(hwnd);
         GetClientRect(hwnd,&rect);
         hdc=BeginPaint(hwnd,&ps);
+        FrameRect(hdc,&rect,h::global::borderBrush.getCreated());
         SelectObject(hdc,h::global::font.setHeight(rect.bottom).getCreated());
         SetTextColor(hdc,h::global::borderBrush.getBase());
         SetBkColor(hdc,h::global::bkBrush.getBase());
@@ -908,7 +914,6 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         RESIZE_RB,
         RESIZE_LT
     };
-    static int flagResize;
     constexpr auto CELEND="[CELEND]",
                    REPLACE_ENTER="[ENTER]",
                    SECTION_STRING="STRING",
@@ -939,10 +944,8 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         case WM_CTLCOLOREDIT:
         {   
             
-            auto rgb_f=h::StrToInt(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_BORDER_COLOR),3);
-            SetTextColor(HDC(wp),RGB(rgb_f[0],rgb_f[1],rgb_f[2]));
-            rgb_f=h::StrToInt(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_BK_COLOR),3);
-            SetBkColor(HDC(wp),RGB(rgb_f[0],rgb_f[1],rgb_f[2]));
+            SetTextColor(HDC(wp),h::global::borderBrush.getBase());
+            SetBkColor(HDC(wp),h::global::bkBrush.getBase());
         }
         return (LONG)h::global::bkBrush.getCreated();
         break;
@@ -951,8 +954,8 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         break;
 
         case WM_RBUTTONDOWN:
-            h::windowLong(hwnd,WS_EX_NOACTIVATE,h::customBool(h::getWindowStr(hwnd).compare(h::constGlobalData::MODE_INPUT),h::modeOperator::SUB,h::modeOperator::ADD),true);
-            SetWindowText(hwnd,h::customBool(h::getWindowStr(title).compare(h::constGlobalData::MODE_INPUT),TEXT(h::constGlobalData::MODE_INPUT),TEXT(h::constGlobalData::MODE_OUTPUT)));
+            h::windowLong(hwnd,WS_EX_NOACTIVATE,h::customBool(h::getWindowStr(title).compare(h::constGlobalData::MODE_INPUT),h::modeOperator::SUB,h::modeOperator::ADD),true);
+            SetWindowText(title,h::customBool(h::getWindowStr(title).compare(h::constGlobalData::MODE_INPUT),TEXT(h::constGlobalData::MODE_INPUT),TEXT(h::constGlobalData::MODE_OUTPUT)));
             InvalidateRect(title,NULL,TRUE);
             UpdateWindow(title);
         break;
@@ -985,6 +988,7 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
                 SendMessage(list,WM_COMMAND,h::constGlobalData::LIST::SET_LIST,(LPARAM)&listData);
             }
             edit=CreateWindow(TEXT("EDIT"),TEXT(""),ES_AUTOHSCROLL|ES_AUTOVSCROLL|WS_HSCROLL|WS_VSCROLL|WS_VISIBLE|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS|ES_MULTILINE|ES_WANTRETURN,rect.left,rect.top+(rect.bottom-rect.top)/2,((rect.right-rect.left)/10)*8-rect.left,(rect.bottom-rect.top)/2,hwnd,NULL,LPCREATESTRUCT(lp)->hInstance,NULL);
+            SendMessage(edit,WM_SETFONT,(WPARAM)h::global::font.setHeight(20).getCreated(),MAKELPARAM(FALSE,0));
             ofn.lStructSize=sizeof(OPENFILENAME);
             ofn.hwndOwner=hwnd;
             ofn.lpstrFilter=TEXT("All files {*.*}\0*.*\0\0");
@@ -995,6 +999,8 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
             GetWindowRect(hwnd,&rect);
             EnumChildWindows(hwnd,addGlobalHwndsChild,0);
             rm=std::move(h::ResizeManager(hwnd,h::global::hwnds));
+            InvalidateRect(edit,NULL,TRUE);
+            UpdateWindow(edit);
             break;
         case WM_PAINT:
         GetClientRect(hwnd,&rect);
@@ -1009,7 +1015,6 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
             GetWindowRect(hwnd,&rect);
             h::global::now.x=rect.right;
             h::global::now.y=rect.bottom;
-            flagResize=TIMER::RESIZE_LT;
             SetTimer(hwnd,TIMER::RESIZE_LT,100,resizeLTProc);        
             break;
         }
@@ -1018,15 +1023,10 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
             GetWindowRect(hwnd,&rect);
             h::global::now.x=rect.left;
             h::global::now.y=rect.top;
-
-            flagResize=TIMER::RESIZE_RB;
             SetTimer(hwnd,TIMER::RESIZE_RB,100,resizeRBProc);
             break;
         }
 
-        break;
-        case WM_LBUTTONUP:
-        KillTimer(hwnd,flagResize);
         break;
         case WM_COMMAND:
             switch(LOWORD(wp)){
@@ -1104,4 +1104,3 @@ int WINAPI WinMain(HINSTANCE hInstance,HINSTANCE hPrevInstance,PSTR lpCmdLine,in
     
     return msg.wParam;
 }
-//getwindowdc
