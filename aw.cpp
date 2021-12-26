@@ -115,6 +115,7 @@ namespace h{
                            SIMPLEBTN_WINDOW="SIMPLEBTN",
                            SIMPLELIST_WINDOW="SIMPLELIST",
                            SETTING_WINDOW="SETTING";
+            constexpr auto MOUSE_UPDATA_COUNT=10;
             enum SCROLL{
                 GET_SCROLL=100,
                 SET,
@@ -131,9 +132,14 @@ namespace h{
                 DELETE_ITEM,
                 GET_ITEM,
                 GET_OBJ
-            };                
+            };     
+            enum BTN_LIST{
+                SET_BTN_LiST,
+            };        
+            enum MENU{
+                SET_MENU=400,
 
-
+            };
         };
         namespace global{
             std::vector<HWND> hwnds;
@@ -497,6 +503,12 @@ namespace h{
         int msg;
         HWND scroll;
     };
+    // struct btnListData{
+    //     std::vector< std::pair<std::string,std::vector<std::pair<std::string,int>> > > obj;
+    // };
+    struct menuData{
+        std::vector<std::pair<std::string,std::vector<std::pair<std::string,int> > > > obj;
+    };
 };
 BOOL CALLBACK addGlobalHwndsChild(HWND hwnd,LPARAM lp){
     h::global::hwnds.push_back(hwnd);
@@ -535,7 +547,6 @@ LRESULT CALLBACK scrollProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         data[hwnd];
         break;
         case WM_LBUTTONDOWN:
-        // case WM_LBUTTONUP:
         case WM_MOUSEMOVE:
         data[hwnd].is_move=0>GetAsyncKeyState(VK_LBUTTON);
         if(!data[hwnd].is_move){
@@ -550,6 +561,9 @@ LRESULT CALLBACK scrollProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         hdc=BeginPaint(hwnd,&ps);
         SelectObject(hdc,h::global::font.setHeight(rect.bottom).getCreated());
         defb=(HBRUSH)SelectObject(hdc,h::global::borderBrush.getCreated());
+        SetTextColor(hdc,h::global::borderBrush.getBase());
+        SetBkColor(hdc,h::global::bkBrush.getBase());
+        DrawText(hdc,(h::getWindowStr(hwnd)+h::cast::toString(data[hwnd].nowc)).c_str(),-1,&rect,DT_CENTER|DT_WORDBREAK|DT_VCENTER);
         Rectangle(hdc,data[hwnd].now,0,data[hwnd].now+10,rect.bottom);
         FrameRect(hdc,&rect,h::global::borderBrush.getCreated());
         {
@@ -559,15 +573,10 @@ LRESULT CALLBACK scrollProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
             }
             data[hwnd].nowc=nowc;
 
-        std::string text=(h::getWindowStr(hwnd)+h::cast::toString(data[hwnd].nowc));
-        SetTextColor(hdc,h::global::borderBrush.getBase());
-        SetBkColor(hdc,h::global::bkBrush.getBase());
-        TextOut(hdc,data[hwnd].now,rect.bottom/2,text.c_str(),text.size());
         }
         SelectObject(hdc,defb);
         EndPaint(hwnd,&ps);
         break;
-
         case WM_COMMAND:
             switch(wp){
                 case h::constGlobalData::SCROLL::GET_SCROLL:
@@ -587,7 +596,6 @@ LRESULT CALLBACK scrollProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     }
     return DefWindowProc(hwnd,msg,wp,lp);
 }
-
 LRESULT CALLBACK settingProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     static HWND alpha,r,g,b,fontList;
     static h::ResizeManager rm;
@@ -654,7 +662,6 @@ LRESULT CALLBACK settingProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     }
     return DefWindowProc(hwnd,msg,wp,lp);
 }
-
 LRESULT CALLBACK listProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     static std::unordered_map<HWND,h::listData> data;
     static std::string str;
@@ -685,7 +692,7 @@ LRESULT CALLBACK listProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         {
             oneSize=static_cast<double>(rect.bottom)/data[hwnd].showItem;
             SelectObject(hdc,h::global::font.setHeight(oneSize).getCreated());
-            for(int hash=SendMessage(data[hwnd].scroll,WM_COMMAND,h::constGlobalData::SCROLL::GET_SCROLL,0),i=1,end=static_cast<double>(rect.bottom)/oneSize;hash<data[hwnd].list.size()&&i<end;++hash,++i){
+            for(int hash=SendMessage(data[hwnd].scroll,WM_COMMAND,h::constGlobalData::SCROLL::GET_SCROLL,0),i=1;hash<data[hwnd].list.size()&&i<data[hwnd].showItem;++hash,++i){
                 if(hash==data[hwnd].active){
                     SetTextColor(hdc,h::global::bkBrush.getBase());
                     SetBkColor(hdc,h::global::borderBrush.getBase());
@@ -784,9 +791,8 @@ LRESULT CALLBACK btnProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         InvalidateRect(hwnd,NULL,TRUE);
         UpdateWindow(hwnd);
         if(GetParent(hwnd)==NULL)break;
-        SendMessage(GetParent(hwnd),WM_COMMAND,MAKEWPARAM(data[hwnd].msg,data[hwnd].msg),0);
+        SendMessage(GetParent(hwnd),WM_COMMAND,MAKEWPARAM(data[hwnd].msg,0),0);
         break;
-
         case WM_PAINT:
         GetClientRect(hwnd,&rect);
         hdc=BeginPaint(hwnd,&ps);
@@ -798,7 +804,7 @@ LRESULT CALLBACK btnProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         Rectangle(hdc,0,0,rect.right,rect.bottom);
         SelectObject(hdc,h::global::font.setHeight(rect.bottom/2).getCreated());
         DrawText(hdc,h::getWindowStr(hwnd).c_str(),-1,&rect,DT_CENTER|DT_WORDBREAK|DT_VCENTER);
-        FrameRect(hdc,&rect,h::global::borderBrush.getCreated());
+        FrameRect(hdc,&rect,h::customBool(data[hwnd].flag,h::global::bkBrush.getCreated(),h::global::borderBrush.getCreated()));
         SelectObject(hdc,defb);
         EndPaint(hwnd,&ps);
         break;
@@ -819,7 +825,6 @@ namespace h{
           hash;
     };
 };
-
 VOID CALLBACK resizeRBProc(HWND hwnd , UINT uMsg ,UINT idEvent , DWORD dwTime) {
     if(0<=GetAsyncKeyState(VK_LBUTTON)){
         KillTimer(hwnd,idEvent);
@@ -844,14 +849,6 @@ VOID CALLBACK moveProc(HWND hwnd , UINT uMsg ,UINT idEvent , DWORD dwTime) {
     GetCursorPos(&pos);
     MoveWindow(hwnd,pos.x-h::global::hash.x,pos.y-h::global::hash.y,h::global::now.x,h::global::now.y,TRUE);
 }
-// void drawBorder(HWND hwnd){
-//     PAINTSTRUCT ps;
-//     RECT rect;
-//     GetClientRect(hwnd,&rect);
-//     auto hdc=BeginPaint(hwnd,&ps);
-//     FrameRect(hdc,&rect,h::global::borderBrush.getCreated());
-//     EndPaint(hwnd,&ps);
-// }
 LRESULT CALLBACK titleProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     RECT rect;
     PAINTSTRUCT ps;
@@ -877,7 +874,7 @@ LRESULT CALLBACK titleProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         h::global::hash.y=pos.y-rect.top;
         h::global::now.x=rect.right-rect.left;
         h::global::now.y=rect.bottom-rect.top;
-        SetTimer(GetParent(hwnd),MOVEID,100,moveProc);
+        SetTimer(GetParent(hwnd),MOVEID,h::constGlobalData::MOUSE_UPDATA_COUNT,moveProc);
         break;
         case WM_PAINT:
         GetClientRect(hwnd,&rect);
@@ -904,11 +901,68 @@ LRESULT CALLBACK titleProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     }
     return DefWindowProc(hwnd,msg,wp,lp);
 }
+
+LRESULT CALLBACK menuProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
+    static std::unordered_map<HWND,h::menuData> data;
+    HDC hdc;
+    PAINTSTRUCT ps;
+    RECT rect;
+    switch(msg){
+        case WM_CREATE:
+            data[hwnd];
+        break;
+        case WM_COMMAND:
+            if(wp<data[hwnd].obj.size()){
+                ShowWindow(FindWindowEx(hwnd,NULL,TEXT(h::constGlobalData::SIMPLEBTN_WINDOW),data[hwnd].obj[wp].first.c_str()),SW_HIDE);
+                break;
+            }
+            switch(wp){
+                case h::constGlobalData::MENU::SET_MENU:
+                    GetClientRect(hwnd,&rect);
+                    data[hwnd].obj=((struct h::menuData*)lp)->obj;
+                    {
+                        int i=0,oneSize=rect.right/data[hwnd].obj.size();
+                        rect.right=oneSize;
+                        for(auto &[section,list]:data[hwnd].obj){
+                            RECT rectl{
+                                rect.left,rect.top,rect.right,rect.bottom
+                            };
+                            int oneSizel=oneSize/list.size();
+                            rectl.right=rect.left+oneSizel;
+                            h::btnData btnData{0,i};
+                            ++i;
+                            SendMessage(CreateWindow(TEXT(h::constGlobalData::SIMPLEBTN_WINDOW),section.c_str(),WS_VISIBLE|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,rect.left,rect.top,rect.right-rect.left,rect.bottom-rect.top,hwnd,NULL,(HINSTANCE)GetModuleHandle(0),NULL),WM_COMMAND,h::constGlobalData::BTN::SET_BTN,(LPARAM)&btnData);
+                            rect.left+=oneSize;
+                            rect.right+=oneSize;
+                            for(auto &[name,msg]:list){
+                                btnData.msg=msg;
+                                SendMessage(CreateWindow(TEXT(h::constGlobalData::SIMPLEBTN_WINDOW),name.c_str(),WS_VISIBLE|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,rectl.left,rectl.top,rectl.right-rectl.left,rectl.bottom-rectl.top,hwnd,NULL,(HINSTANCE)GetModuleHandle(0),NULL),WM_COMMAND,h::constGlobalData::BTN::SET_BTN,(LPARAM)&btnData);    
+                                rectl.left+=oneSizel;
+                                rectl.right+=oneSizel;
+                            }
+                        }                        
+                    }
+                break;
+            }
+            if(GetParent(hwnd)==NULL)break;
+            SendMessage(GetParent(hwnd),WM_COMMAND,wp,0);
+            h::global::hwnds.clear();
+            EnumChildWindows(hwnd,addGlobalHwndsChild,0);
+            for(auto hw:h::global::hwnds){
+                ShowWindow(hw,SW_SHOW);
+            }
+        break;
+    }
+    return DefWindowProc(hwnd,msg,wp,lp);
+}
 LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     enum MSG{
         Add=10,
         Sub,
-        LIST_DBK
+        LIST_DBK,
+        MENU_FILE_OPEN,
+        MENU_FILE_SAVE,
+        MENU_HEIP
     };
     enum TIMER{
         RESIZE_RB,
@@ -919,6 +973,7 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
                    SECTION_STRING="STRING",
                    KEY_WORDLIST="wordList",
                    HELPHTML="EasyHelp.html";
+
     static HWND list,
                 edit,
                 sub,
@@ -943,7 +998,6 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         break;
         case WM_CTLCOLOREDIT:
         {   
-            
             SetTextColor(HDC(wp),h::global::borderBrush.getBase());
             SetBkColor(HDC(wp),h::global::bkBrush.getBase());
         }
@@ -974,16 +1028,31 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
             rect.top+=h::global::now.y;
             rect.bottom-=h::global::now.y;
             title=CreateWindow(TEXT("title"),TEXT(h::constGlobalData::MODE_INPUT),WS_VISIBLE|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,rect.left,rect.top,rect.right-rect.left,(rect.bottom-rect.top)/10,hwnd,NULL,LPCREATESTRUCT(lp)->hInstance,NULL);
-            h::global::now.y=(rect.bottom-rect.top)/10;
-            rect.top+=h::global::now.y;
-            // rect.bottom-=h::global::now.y;
+            rect.top+=(rect.bottom-rect.top)/10;;
             {
+                h::menuData menuData{
+                    {
+                        {"File",
+                            {
+                                {"Open",MSG::MENU_FILE_OPEN},
+                                {"Save",MSG::MENU_FILE_SAVE}
+                            }
+                        },
+                        {"Help",
+                            {
+                                {"Open",MSG::MENU_HEIP}
+                            }
+                        }
+                    }
+                };
+                SendMessage(CreateWindow(TEXT("MENU"),TEXT(""),WS_VISIBLE|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,rect.left,rect.top,rect.right-rect.left,(rect.bottom-rect.top)/10,hwnd,NULL,LPCREATESTRUCT(lp)->hInstance,NULL),WM_COMMAND,h::constGlobalData::MENU::SET_MENU,(LPARAM)&menuData);
+                rect.top+=(rect.bottom-rect.top)/10;
                 h::btnData btnData{false,MSG::Add};
                 SendMessage(CreateWindow(TEXT(h::constGlobalData::SIMPLEBTN_WINDOW),TEXT("Add"),BS_PUSHBUTTON|WS_VISIBLE|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS|BS_MULTILINE,((rect.right-rect.left)/10)*8,rect.top,rect.right-((rect.right-rect.left)/10)*8,(rect.bottom-rect.top)/2,hwnd,(HMENU)MSG::Add,LPCREATESTRUCT(lp)->hInstance,NULL),WM_COMMAND,h::constGlobalData::BTN::SET_BTN,(LPARAM)&btnData);
-                btnData.msg=MSG::LIST_DBK;
+                btnData.msg=MSG::Sub;
                 sub=CreateWindow(TEXT(h::constGlobalData::SIMPLEBTN_WINDOW),TEXT("Sub"),BS_PUSHBUTTON|WS_VISIBLE|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS|BS_MULTILINE,((rect.right-rect.left)/10)*8,rect.top+(rect.bottom-rect.top)/2,rect.right-((rect.right-rect.left)/10)*8,(rect.bottom-rect.top)/2,hwnd,(HMENU)MSG::LIST_DBK,LPCREATESTRUCT(lp)->hInstance,NULL);
                 SendMessage(sub,WM_COMMAND,h::constGlobalData::BTN::SET_BTN,(LPARAM)&btnData);
-                h::listData listData{h::split(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(SECTION_STRING,KEY_WORDLIST),CELEND),0,10,MSG::Sub,NULL};
+                h::listData listData{h::split(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(SECTION_STRING,KEY_WORDLIST),CELEND),0,10,MSG::LIST_DBK,NULL};
                 list=CreateWindow(TEXT(h::constGlobalData::SIMPLELIST_WINDOW),TEXT(""),BS_PUSHBUTTON|WS_VISIBLE|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS|BS_MULTILINE,rect.left,rect.top,((rect.right-rect.left)/10)*8-rect.left,(rect.bottom-rect.top)/2,hwnd,NULL,LPCREATESTRUCT(lp)->hInstance,NULL);
                 SendMessage(list,WM_COMMAND,h::constGlobalData::LIST::SET_LIST,(LPARAM)&listData);
             }
@@ -999,8 +1068,6 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
             GetWindowRect(hwnd,&rect);
             EnumChildWindows(hwnd,addGlobalHwndsChild,0);
             rm=std::move(h::ResizeManager(hwnd,h::global::hwnds));
-            InvalidateRect(edit,NULL,TRUE);
-            UpdateWindow(edit);
             break;
         case WM_PAINT:
         GetClientRect(hwnd,&rect);
@@ -1015,7 +1082,7 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
             GetWindowRect(hwnd,&rect);
             h::global::now.x=rect.right;
             h::global::now.y=rect.bottom;
-            SetTimer(hwnd,TIMER::RESIZE_LT,100,resizeLTProc);        
+            SetTimer(hwnd,TIMER::RESIZE_LT,h::constGlobalData::MOUSE_UPDATA_COUNT,resizeLTProc);        
             break;
         }
         GetWindowRect(sub,&rect);
@@ -1023,10 +1090,9 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
             GetWindowRect(hwnd,&rect);
             h::global::now.x=rect.left;
             h::global::now.y=rect.top;
-            SetTimer(hwnd,TIMER::RESIZE_RB,100,resizeRBProc);
+            SetTimer(hwnd,TIMER::RESIZE_RB,h::constGlobalData::MOUSE_UPDATA_COUNT,resizeRBProc);
             break;
         }
-
         break;
         case WM_COMMAND:
             switch(LOWORD(wp)){
@@ -1034,12 +1100,14 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
                     str=h::replaceAll(h::getWindowStr(edit),"\r\n",REPLACE_ENTER);
                     SendMessage(list,WM_COMMAND,h::constGlobalData::LIST::PUSH,(LPARAM)&str);
                 break;
-                case MSG::LIST_DBK:
+                case MSG::Sub:
                     SendMessage(list,WM_COMMAND,h::constGlobalData::LIST::DELETE_ITEM,SendMessage(list,WM_COMMAND,h::constGlobalData::LIST::GET_SELECT_INDEX,0));
                 break;
-                case MSG::Sub:
+                case MSG::LIST_DBK:
                     h::pressKeyAll(h::stringToWstring(h::replaceAll(((std::string*)SendMessage(list,WM_COMMAND,h::constGlobalData::LIST::GET_ITEM,SendMessage(list,WM_COMMAND,h::constGlobalData::LIST::GET_SELECT_INDEX,0)))->c_str(),REPLACE_ENTER,h::constGlobalData::ENTER)));
-                    
+                break;
+                case MSG::MENU_FILE_OPEN:
+                    MessageBox(0,0,0,0);
                 break;
                 case FILEOPEN:
                     if(!GetOpenFileName(&ofn))break;
@@ -1090,6 +1158,8 @@ int WINAPI WinMain(HINSTANCE hInstance,HINSTANCE hPrevInstance,PSTR lpCmdLine,in
     h::baseStyle(btnProc,h::constGlobalData::SIMPLEBTN_WINDOW);
     h::baseStyle(listProc,h::constGlobalData::SIMPLELIST_WINDOW);
     h::baseStyle(titleProc,"title");
+    // h::baseStyle(btnListProc,"btnListProc");
+    h::baseStyle(menuProc,"MENU");
     auto re=h::StrToInt(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(h::constGlobalData::SECTION_POS,MAINWINDOWNAME),4);
     SendMessage(CreateWindowEx(WS_EX_TOPMOST|WS_EX_LAYERED,TEXT(MAIN_WINDOW_CLASS),TEXT(h::constGlobalData::MODE_INPUT),WS_CLIPCHILDREN|WS_VISIBLE|WS_POPUP,re[POS::X],re[POS::Y],re[POS::WIDTH],re[POS::HEIGHT],NULL,NULL,hInstance,NULL),WM_SETICON,ICON_BIG,(LPARAM)LoadIcon(hInstance,h::constGlobalData::ICON_NAME));
     re=h::StrToInt(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_BORDER_COLOR),3);
@@ -1104,3 +1174,4 @@ int WINAPI WinMain(HINSTANCE hInstance,HINSTANCE hPrevInstance,PSTR lpCmdLine,in
     
     return msg.wParam;
 }
+//btn and scroll はmoveprocとかみたいな処理でマウスの管理をする
