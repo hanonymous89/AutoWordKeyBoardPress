@@ -1118,6 +1118,7 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
                         l=h::split(h::File(path).read().getContent(),CELEND);
                     }
                         ((struct h::listData*)(SendMessage(list,WM_COMMAND,h::constGlobalData::LIST::GET_OBJ,0)))->list=l;
+                        SendMessage(((struct h::listData*)(SendMessage(list,WM_COMMAND,h::constGlobalData::LIST::GET_OBJ,0)))->scroll,WM_COMMAND,h::constGlobalData::SCROLL::SET_END,l.size());
                     }
                     InvalidateRect(list,NULL,TRUE);
                     UpdateWindow(list);
