@@ -1107,9 +1107,6 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
                     h::pressKeyAll(h::stringToWstring(h::replaceAll(((std::string*)SendMessage(list,WM_COMMAND,h::constGlobalData::LIST::GET_ITEM,SendMessage(list,WM_COMMAND,h::constGlobalData::LIST::GET_SELECT_INDEX,0)))->c_str(),REPLACE_ENTER,h::constGlobalData::ENTER)));
                 break;
                 case MSG::MENU_FILE_OPEN:
-                    MessageBox(0,0,0,0);
-                break;
-                case FILEOPEN:
                     if(!GetOpenFileName(&ofn))break;
                     {
                     auto l=((struct h::listData*)(SendMessage(list,WM_COMMAND,h::constGlobalData::LIST::GET_OBJ,0)))->list;
@@ -1125,11 +1122,11 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
                     InvalidateRect(list,NULL,TRUE);
                     UpdateWindow(list);
                 break;
-                case FILESAVE:
+                case MSG::MENU_FILE_SAVE:
                     if(!GetOpenFileName(&ofn))break;
                     h::File(path).write(h::vecToString(((struct h::listData*)(SendMessage(list,WM_COMMAND,h::constGlobalData::LIST::GET_OBJ,0)))->list,CELEND),MessageBox(hwnd,TEXT("reset?"),TEXT("Question"),MB_ICONQUESTION|MB_YESNO)==IDYES);
                 break;
-                case SHOWHELP:
+                case MSG::MENU_HEIP:
                     if(!std::filesystem::exists(HELPHTML))h::File(HELPHTML).write(
                     "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>EasyHelp</title></head><body><h1>モードについて</h1><div>ウィンドウ内を右クリック:モード変更</div><div>ウィンドウのタイトルバーを見るとモードが書いてある</div><div>Mode:Inputの場合は本ソフトウェアにテキストを書き込めます</div><div>Mode:Outputの場合は入力したい場所にフォーカスをあて入力します</div><div>※入力については後述</div><h1>本ソフトウェアそれぞれのウィンドウについて</h1><div>タイトルバーの無いウィンドウがテキストボックスになります</div><div>※テキストボックスは枠の色が変わっていることろをドラッグするとサイズ変更と疑似的な移動ができます</div><div>\"wordList\"は自動入力するデータを保存し自動入力に使われます</div><div>\"Add\"はテキストボックスの内容をリストに追加します</div><div>\"Sub\"は選択されているリストのデータを削除します</div><h1>入力について</h1><div>モードを\"Mode:Output\"に変更し入力したい場所にフォーカスを当てリストをダブルクリックしてください</div><h1>ファイルの読み取りとセーブについて</h1><div>本ソフトウェアのタイトルバー付近にある\"FILE (F)\"について説明します</div><div>\"FILE(F)\"の\"FILE OPEN\"でファイル選択ウィンドウが開きます</div><div>※ファイル選択については省略</div><div>開いたファイルの[CELEND]までを一つのデータとしリストに表示します</div><div>その際にメッセージボックスが開いてリストをリセットするか聞かれるので「はい」を選択とリストがリセットされ「いいえ」を選択するとそのまま追加されます</div><div>\"FILE(F)\"の\"FILE SAVE\"で同じようにファイル選択ウィンドウが開きます</div><div>開くと先ほどと同じようなファイルをリセットするかファイルの最後に追加するかを聞かれます</div><div>※選択後の説明は略</div><h1>設定ファイルについて</h1><div>本ソフトウェアと同じフォルダ（ディレクトリ）内にあるsetting(.ini)について説明します</div><div>このファイルは起動時に同じフォルダ内に見つからない場合新しく作成されます</div><div>それぞれのデータがどのように機能するかは多すぎるので書きません</div></body></html>"
                     );
