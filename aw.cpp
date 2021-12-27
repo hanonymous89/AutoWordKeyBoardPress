@@ -639,20 +639,10 @@ namespace h{
         }
         
     };
-    // class wndProcCMD_OpenSetting:public WndProcWM{
-    //     public:
-    //     LRESULT CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp)override;
-    // };
-    
-    class wndProcCMD :public WndProc{
-        private:
-        wndProcCMD_Add add_c;
-        wndProcCMD_Sub sub;
-        wndProcCMD_Open open;
-        wndProcCMD_Save save;
-        wndProcCMD_Help help;
-        // wndProcCMD_OpenSetting setting;
-        wndProcCMD_DBK dbk;
+    class wndProcCMD_Setting:public WndProc{
+        LRESULT CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp)override;
+    };
+    class wndProcCMD:public WndProc{
         public:
         inline LRESULT CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp)override{
             if(!wms.count(wp))return DefWindowProc(hwnd,msg,wp,lp);
@@ -663,7 +653,18 @@ namespace h{
             }
             return l;
         }
-        wndProcCMD();
+    };
+    class wndProcCMD_c :public wndProcCMD{
+        private:
+        wndProcCMD_Add add_c;
+        wndProcCMD_Sub sub;
+        wndProcCMD_Open open;
+        wndProcCMD_Save save;
+        wndProcCMD_Help help;
+        wndProcCMD_DBK dbk;
+        wndProcCMD_Setting setting;
+        public:
+        wndProcCMD_c();
     };
     class mainProc:public WndProc{
         public:
@@ -679,6 +680,7 @@ namespace h{
             LIST_DBK,
             MENU_FILE_OPEN,
             MENU_FILE_SAVE,
+            MENU_SETTING,
             MENU_HEIP
         };
         enum TIMER{
@@ -694,7 +696,7 @@ namespace h{
         wndProcWM_RBTNDown RBtnDown;
         wndProcWM_LBTNDown LBtnDown;
         wndProcWM_ColorEdit colorEdit;
-        wndProcCMD cmd;
+        wndProcCMD_c cmd;
         static ResizeManager rm;
         static OPENFILENAME ofn;
         static TCHAR path[MAX_PATH];
@@ -741,13 +743,14 @@ namespace h{
     ResizeManager mainProc::rm;
     OPENFILENAME mainProc::ofn{0};
     TCHAR mainProc::path[MAX_PATH];
-    wndProcCMD::wndProcCMD(){
+    wndProcCMD_c::wndProcCMD_c(){
         add(mainProc::MSG::Add,&add_c);
         add(mainProc::MSG::Sub,&sub);
         add(mainProc::MSG::LIST_DBK,&dbk);
         add(mainProc::MSG::MENU_FILE_OPEN,&open);
         add(mainProc::MSG::MENU_FILE_SAVE,&save);
         add(mainProc::MSG::MENU_HEIP,&help);
+        add(mainProc::MSG::MENU_SETTING,&setting);
         // add(mainProc::MSG::S,setting)
     }
     LRESULT CALLBACK wndProcWM_Exit::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
@@ -782,6 +785,12 @@ namespace h{
                         {
                             {"Open",mainProc::MSG::MENU_FILE_OPEN},
                             {"Save",mainProc::MSG::MENU_FILE_SAVE}
+                        }
+                    },
+                    {
+                        "Setting",
+                        {
+                            {"Open",mainProc::MSG::MENU_SETTING}
                         }
                     },
                     {"Help",
@@ -875,6 +884,10 @@ namespace h{
         h::File(mainProc::getPath()).write(h::vecToString(((struct h::listData*)(SendMessage(mainProc::getHwnd(mainProc::HWNDS::list),WM_COMMAND,h::constGlobalData::LIST::GET_OBJ,0)))->list,h::constGlobalData::CELEND),MessageBox(hwnd,TEXT("reset?"),TEXT("Question"),MB_ICONQUESTION|MB_YESNO)==IDYES);
         return DefWindowProc(hwnd,msg,wp,lp);
     }
+    inline LRESULT  CALLBACK wndProcCMD_Setting::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
+        CreateWindow(TEXT(h::constGlobalData::SETTING_WINDOW),TEXT(h::constGlobalData::SETTING_WINDOW),WS_VISIBLE|WS_OVERLAPPEDWINDOW|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,CW_USEDEFAULT,CW_USEDEFAULT,CW_USEDEFAULT,CW_USEDEFAULT,NULL,NULL,(HINSTANCE)GetModuleHandle(0),NULL);
+        return DefWindowProc(hwnd,msg,wp,lp);
+    }
 };
 
 
@@ -895,6 +908,106 @@ namespace h{
         EnumFontFamiliesEx(hdc,&lf,(FONTENUMPROC)EnumFontFamProc,(LONG_PTR)&lf,0);
         ReleaseDC(0,hdc);
         h::global::vecStr=before;
+    }
+    class settingProc_Create:public WndProcWM{
+        public:
+        LRESULT CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp ,LPARAM lp)override;
+    };
+    class settingProc_Destroy:public WndProcWM{
+        public:
+        LRESULT CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp ,LPARAM lp)override;
+    };
+    class settingProc_Resize:public WndProcWM{
+        public:
+        LRESULT CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp)override;
+    };
+    class settingProcCMD_Change:public WndProcWM{
+        public:
+        LRESULT CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp)override;
+    };
+    class settingProcCMD:public wndProcCMD{
+        private:
+
+        public:
+        settingProcCMD();
+    };
+    class settingProc:public WndProc{
+        public:
+        enum HWNDS{
+            alpha,r,g,b,fontList
+        };
+        private:
+        static HWND hwnds[fontList+1];
+        static ResizeManager rm;
+        settingProc_Destroy destroy;
+        settingProc_Create create;
+        wndProcWM_PaintOfFrame paintOfFrame;
+        settingProc_Resize resize;
+        public:
+        static auto setHwnd(HWND hwnd,int n){
+            return hwnds[n]=hwnd;
+            }
+        static auto getHwnd(int n){
+            return hwnds[n];
+        }
+        static auto setRm(HWND hwnd,std::vector<HWND> list){
+            rm=std::move(ResizeManager(hwnd,list));
+        }
+        static auto getRm(){
+            return rm;
+        }
+        settingProc(){
+            add(WM_DESTROY,&destroy);
+            add(WM_CREATE,&create);
+            add(WM_PAINT,&paintOfFrame);
+            add(WM_SIZE,&resize);
+        }
+    };//class a:public getter and setter 
+    HWND settingProc::hwnds[settingProc::HWNDS::fontList+1];
+    ResizeManager settingProc::rm;
+    settingProcCMD::settingProcCMD(){
+
+    }
+    LRESULT CALLBACK settingProc_Create::Do(HWND hwnd,UINT msg,WPARAM wp ,LPARAM lp){
+        RECT rect;
+        constexpr int MSG1=10;
+        GetClientRect(hwnd,&rect);
+        settingProc::setHwnd(CreateWindowEx(WS_EX_TOPMOST,TEXT(h::constGlobalData::SCROLL_WINDOW),TEXT("Alpha"),WS_CHILD|WS_VISIBLE|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,0,0,rect.right/2,rect.bottom/5,hwnd,NULL,LPCREATESTRUCT(lp)->hInstance,NULL),settingProc::HWNDS::alpha);
+        settingProc::setHwnd(CreateWindowEx(WS_EX_TOPMOST,TEXT(h::constGlobalData::SCROLL_WINDOW),TEXT("r"),WS_CHILD|WS_VISIBLE|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,0,rect.bottom/5,rect.right/2,rect.bottom/5,hwnd,NULL,LPCREATESTRUCT(lp)->hInstance,NULL),settingProc::HWNDS::r);
+        settingProc::setHwnd(CreateWindowEx(WS_EX_TOPMOST,TEXT(h::constGlobalData::SCROLL_WINDOW),TEXT("g"),WS_CHILD|WS_VISIBLE|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,0,(rect.bottom/5)*2,rect.right/2,rect.bottom/5,hwnd,NULL,LPCREATESTRUCT(lp)->hInstance,NULL),settingProc::HWNDS::g);
+        settingProc::setHwnd(CreateWindowEx(WS_EX_TOPMOST,TEXT(h::constGlobalData::SCROLL_WINDOW),TEXT("b"),WS_CHILD|WS_VISIBLE|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,0,(rect.bottom/5)*3,rect.right/2,rect.bottom/5,hwnd,NULL,LPCREATESTRUCT(lp)->hInstance,NULL),settingProc::HWNDS::b);
+        settingProc::setHwnd(CreateWindow(TEXT(h::constGlobalData::SIMPLELIST_WINDOW),TEXT(""),WS_CHILD|WS_VISIBLE|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,rect.right/2,0,rect.right/2,rect.bottom/5*4,hwnd,NULL,LPCREATESTRUCT(lp)->hInstance,NULL),settingProc::HWNDS::fontList);
+        h::scrollData data{0,255,0,0,false};
+        SendMessage(settingProc::getHwnd(settingProc::HWNDS::alpha),WM_COMMAND,h::constGlobalData::SCROLL::SET,(LPARAM)&data);
+        SendMessage(settingProc::getHwnd(settingProc::HWNDS::r),WM_COMMAND,h::constGlobalData::SCROLL::SET,(LPARAM)&data);
+        SendMessage(settingProc::getHwnd(settingProc::HWNDS::g),WM_COMMAND,h::constGlobalData::SCROLL::SET,(LPARAM)&data);
+        SendMessage(settingProc::getHwnd(settingProc::HWNDS::b),WM_COMMAND,h::constGlobalData::SCROLL::SET,(LPARAM)&data);
+        h::listData listData{{},0,MSG1,0,NULL};
+        h::setFontList(&listData.list);
+        SendMessage(settingProc::getHwnd(settingProc::HWNDS::fontList),WM_COMMAND,h::constGlobalData::LIST::SET_LIST,LPARAM(&listData));           
+        h::global::hwnds.clear();
+        EnumChildWindows(hwnd,h::addGlobalHwndsChild,0);
+        settingProc::setRm(hwnd,h::global::hwnds);
+        return DefWindowProc(hwnd,msg,wp,lp);
+    }
+    LRESULT CALLBACK settingProc_Destroy::Do(HWND hwnd,UINT msg,WPARAM wp ,LPARAM lp){
+        h::INI(h::constGlobalData::SETTING_FILE)
+        .editValue(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_ALPHA,h::cast::toString((int)SendMessage(settingProc::getHwnd(settingProc::HWNDS::alpha),WM_COMMAND,h::constGlobalData::SCROLL::GET_SCROLL,0)))
+        .editValue(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_BORDER_COLOR,h::vecToString(h::cast::toString(SendMessage(settingProc::getHwnd(settingProc::HWNDS::r),WM_COMMAND,h::constGlobalData::SCROLL::GET_SCROLL,0),SendMessage(settingProc::getHwnd(settingProc::HWNDS::g),WM_COMMAND,h::constGlobalData::SCROLL::GET_SCROLL,0),SendMessage(settingProc::getHwnd(settingProc::HWNDS::b),WM_COMMAND,h::constGlobalData::SCROLL::GET_SCROLL,0))," "))
+        .editValue(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_FONT,((std::string*)(SendMessage(settingProc::getHwnd(settingProc::HWNDS::fontList),WM_COMMAND,h::constGlobalData::LIST::GET_ITEM,SendMessage(settingProc::getHwnd(settingProc::HWNDS::fontList),WM_COMMAND,h::constGlobalData::LIST::GET_SELECT_INDEX,0))))->c_str())
+        .save();
+        return DefWindowProc(hwnd,msg,wp,lp);
+    }
+    inline LRESULT CALLBACK settingProc_Resize::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
+         settingProc::getRm().resize();
+         return DefWindowProc(hwnd,msg,wp,lp);
+    }
+    inline LRESULT CALLBACK settingProcCMD_Change::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
+        if(HWND(lp)!=settingProc::getHwnd(settingProc::HWNDS::alpha)){
+            InvalidateRect(hwnd,NULL,TRUE);
+            UpdateWindow(hwnd);
+        }
+        return DefWindowProc(hwnd,msg,wp,lp);
     }
 };
 LRESULT CALLBACK scrollProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
@@ -960,71 +1073,9 @@ LRESULT CALLBACK scrollProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     }
     return DefWindowProc(hwnd,msg,wp,lp);
 }
+
 LRESULT CALLBACK settingProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
-    static HWND alpha,r,g,b,fontList;
-    static h::ResizeManager rm;
-    constexpr int MSG1=1;
-    PAINTSTRUCT ps;
-    HDC hdc;
-    HBRUSH defb,colorb;
-    RECT rect;
-    switch(msg){
-        case WM_DESTROY:
-            h::INI(h::constGlobalData::SETTING_FILE)
-            .editValue(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_ALPHA,h::cast::toString((int)SendMessage(alpha,WM_COMMAND,h::constGlobalData::SCROLL::GET_SCROLL,0)))
-            .editValue(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_BORDER_COLOR,h::vecToString(h::cast::toString(SendMessage(r,WM_COMMAND,h::constGlobalData::SCROLL::GET_SCROLL,0),SendMessage(g,WM_COMMAND,h::constGlobalData::SCROLL::GET_SCROLL,0),SendMessage(b,WM_COMMAND,h::constGlobalData::SCROLL::GET_SCROLL,0))," "))
-            .editValue(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_FONT,((std::string*)(SendMessage(fontList,WM_COMMAND,h::constGlobalData::LIST::GET_ITEM,SendMessage(fontList,WM_COMMAND,h::constGlobalData::LIST::GET_SELECT_INDEX,0))))->c_str())
-            .save();
-        break;
-        case WM_CREATE:
-        GetClientRect(hwnd,&rect);
-        alpha=CreateWindowEx(WS_EX_TOPMOST,TEXT(h::constGlobalData::SCROLL_WINDOW),TEXT("Alpha"),WS_CHILD|WS_VISIBLE|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,0,0,rect.right/2,rect.bottom/5,hwnd,NULL,LPCREATESTRUCT(lp)->hInstance,NULL);
-        r=CreateWindowEx(WS_EX_TOPMOST,TEXT(h::constGlobalData::SCROLL_WINDOW),TEXT("r"),WS_CHILD|WS_VISIBLE|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,0,rect.bottom/5,rect.right/2,rect.bottom/5,hwnd,NULL,LPCREATESTRUCT(lp)->hInstance,NULL);
-        g=CreateWindowEx(WS_EX_TOPMOST,TEXT(h::constGlobalData::SCROLL_WINDOW),TEXT("g"),WS_CHILD|WS_VISIBLE|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,0,(rect.bottom/5)*2,rect.right/2,rect.bottom/5,hwnd,NULL,LPCREATESTRUCT(lp)->hInstance,NULL);
-        b=CreateWindowEx(WS_EX_TOPMOST,TEXT(h::constGlobalData::SCROLL_WINDOW),TEXT("b"),WS_CHILD|WS_VISIBLE|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,0,(rect.bottom/5)*3,rect.right/2,rect.bottom/5,hwnd,NULL,LPCREATESTRUCT(lp)->hInstance,NULL);
-        fontList=CreateWindow(TEXT(h::constGlobalData::SIMPLELIST_WINDOW),TEXT(""),WS_CHILD|WS_VISIBLE|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,rect.right/2,0,rect.right/2,rect.bottom/5*4,hwnd,NULL,LPCREATESTRUCT(lp)->hInstance,NULL);
-        {
-            h::scrollData data{0,255,0,0,false};
-            SendMessage(alpha,WM_COMMAND,h::constGlobalData::SCROLL::SET,(LPARAM)&data);
-            SendMessage(r,WM_COMMAND,h::constGlobalData::SCROLL::SET,(LPARAM)&data);
-            SendMessage(g,WM_COMMAND,h::constGlobalData::SCROLL::SET,(LPARAM)&data);
-            SendMessage(b,WM_COMMAND,h::constGlobalData::SCROLL::SET,(LPARAM)&data);
-            h::listData listData{{},0,10,MSG1,NULL};
-            h::setFontList(&listData.list);
-            SendMessage(fontList,WM_COMMAND,h::constGlobalData::LIST::SET_LIST,LPARAM(&listData));           
-            
-        }
-        h::global::hwnds.clear();
-        EnumChildWindows(hwnd,h::addGlobalHwndsChild,0);
-        rm=std::move(h::ResizeManager(hwnd,h::global::hwnds));
-        break;
-        case WM_PAINT:
-        GetClientRect(hwnd,&rect);
-        hdc=BeginPaint(hwnd,&ps);
-        colorb=CreateSolidBrush(RGB(SendMessage(r,WM_COMMAND,h::constGlobalData::SCROLL::GET_SCROLL,0),SendMessage(g,WM_COMMAND,h::constGlobalData::SCROLL::GET_SCROLL,0),SendMessage(b,WM_COMMAND,h::constGlobalData::SCROLL::GET_SCROLL,0)));
-        defb=(HBRUSH)SelectObject(hdc,colorb);
-        FrameRect(hdc,&rect,colorb);
-        SelectObject(hdc,defb);
-        DeleteObject(colorb);
-        EndPaint(hwnd,&ps);
-        break;
-        case WM_SIZE:
-        rm.resize();
-        break;
-        case WM_COMMAND:
-            switch(wp){
-                case h::constGlobalData::SCROLL::CHANGE:
-                    if(HWND(lp)!=alpha){
-                        InvalidateRect(hwnd,NULL,TRUE);
-                        UpdateWindow(hwnd);
-                    }
-                break;
-                case MSG1:
-                break;
-            }
-        break;
-    }
-    return DefWindowProc(hwnd,msg,wp,lp);
+    return h::settingProc().Do(hwnd,msg,wp,lp);
 }
 LRESULT CALLBACK listProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     static std::unordered_map<HWND,h::listData> data;
@@ -1286,29 +1337,8 @@ LRESULT CALLBACK menuProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     }
     return DefWindowProc(hwnd,msg,wp,lp);
 }
-h::mainProc m;
 LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
-    return m.Do(hwnd,msg,wp,lp);
-    // switch(msg){
-    //     case WM_COMMAND:
-    //         switch(LOWORD(wp)){
-    //             case MSG::MENU_FILE_SAVE:
-    //                 if(!GetOpenFileName(&ofn))break;
-    //                 h::File(path).write(h::vecToString(((struct h::listData*)(SendMessage(list,WM_COMMAND,h::constGlobalData::LIST::GET_OBJ,0)))->list,CELEND),MessageBox(hwnd,TEXT("reset?"),TEXT("Question"),MB_ICONQUESTION|MB_YESNO)==IDYES);
-    //             break;
-    //             case MSG::MENU_HEIP:
-    //                 if(!std::filesystem::exists(HELPHTML))h::File(HELPHTML).write(
-    //                 "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>EasyHelp</title></head><body><h1>モードについて</h1><div>ウィンドウ内を右クリック:モード変更</div><div>ウィンドウのタイトルバーを見るとモードが書いてある</div><div>Mode:Inputの場合は本ソフトウェアにテキストを書き込めます</div><div>Mode:Outputの場合は入力したい場所にフォーカスをあて入力します</div><div>※入力については後述</div><h1>本ソフトウェアそれぞれのウィンドウについて</h1><div>タイトルバーの無いウィンドウがテキストボックスになります</div><div>※テキストボックスは枠の色が変わっていることろをドラッグするとサイズ変更と疑似的な移動ができます</div><div>\"wordList\"は自動入力するデータを保存し自動入力に使われます</div><div>\"Add\"はテキストボックスの内容をリストに追加します</div><div>\"Sub\"は選択されているリストのデータを削除します</div><h1>入力について</h1><div>モードを\"Mode:Output\"に変更し入力したい場所にフォーカスを当てリストをダブルクリックしてください</div><h1>ファイルの読み取りとセーブについて</h1><div>本ソフトウェアのタイトルバー付近にある\"FILE (F)\"について説明します</div><div>\"FILE(F)\"の\"FILE OPEN\"でファイル選択ウィンドウが開きます</div><div>※ファイル選択については省略</div><div>開いたファイルの[CELEND]までを一つのデータとしリストに表示します</div><div>その際にメッセージボックスが開いてリストをリセットするか聞かれるので「はい」を選択とリストがリセットされ「いいえ」を選択するとそのまま追加されます</div><div>\"FILE(F)\"の\"FILE SAVE\"で同じようにファイル選択ウィンドウが開きます</div><div>開くと先ほどと同じようなファイルをリセットするかファイルの最後に追加するかを聞かれます</div><div>※選択後の説明は略</div><h1>設定ファイルについて</h1><div>本ソフトウェアと同じフォルダ（ディレクトリ）内にあるsetting(.ini)について説明します</div><div>このファイルは起動時に同じフォルダ内に見つからない場合新しく作成されます</div><div>それぞれのデータがどのように機能するかは多すぎるので書きません</div></body></html>"
-    //                 );
-    //                 system(std::filesystem::absolute(HELPHTML).string().c_str());
-    //             break;
-    //             case OPENSETTING:
-    //                 CreateWindow(TEXT(h::constGlobalData::SETTING_WINDOW),TEXT(h::constGlobalData::SETTING_WINDOW),WS_VISIBLE|WS_OVERLAPPEDWINDOW|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,CW_USEDEFAULT,CW_USEDEFAULT,CW_USEDEFAULT,CW_USEDEFAULT,NULL,NULL,(HINSTANCE)GetModuleHandle(0),NULL);
-    //             break;
-    //         }
-    //     break;
-    // }
-    // return DefWindowProc(hwnd,msg,wp,lp);
+    return h::mainProc().Do(hwnd,msg,wp,lp);
 }
 int WINAPI WinMain(HINSTANCE hInstance,HINSTANCE hPrevInstance,PSTR lpCmdLine,int nCmdShow){
     constexpr auto MAIN_WINDOW_CLASS="MAIN";
