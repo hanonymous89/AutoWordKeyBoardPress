@@ -548,7 +548,7 @@ namespace h{
     };
 
     class WndProc:public WndProcWM{
-        private:
+        protected:
         std::unordered_map<UINT,std::vector<WndProcWM*> > wms;
         public:
         inline LRESULT CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp)override{
@@ -608,6 +608,63 @@ namespace h{
         return (LONG)h::global::bkBrush.getCreated();
         }
     };
+    class wndProcCMD_Add:public WndProcWM{
+        public:
+        LRESULT CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp)override;
+    };
+    class wndProcCMD_Sub:public WndProcWM{
+        public:
+        LRESULT CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp)override;
+    };
+    class wndProcCMD_DBK:public WndProcWM{
+        public:
+        LRESULT CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp)override;
+    };
+    class wndProcCMD_Open:public WndProcWM{
+        public:
+        LRESULT CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp)override;
+    };
+    class wndProcCMD_Save:public WndProcWM{
+        public:
+        LRESULT CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp)override;
+    };
+    class wndProcCMD_Help:public WndProcWM{
+        public:
+        LRESULT CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp)override{
+            if(!std::filesystem::exists(h::constGlobalData::HELPHTML))h::File(h::constGlobalData::HELPHTML).write(
+                "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>EasyHelp</title></head><body><h1>モードについて</h1><div>ウィンドウ内を右クリック:モード変更</div><div>ウィンドウのタイトルバーを見るとモードが書いてある</div><div>Mode:Inputの場合は本ソフトウェアにテキストを書き込めます</div><div>Mode:Outputの場合は入力したい場所にフォーカスをあて入力します</div><div>※入力については後述</div><h1>本ソフトウェアそれぞれのウィンドウについて</h1><div>タイトルバーの無いウィンドウがテキストボックスになります</div><div>※テキストボックスは枠の色が変わっていることろをドラッグするとサイズ変更と疑似的な移動ができます</div><div>\"wordList\"は自動入力するデータを保存し自動入力に使われます</div><div>\"Add\"はテキストボックスの内容をリストに追加します</div><div>\"Sub\"は選択されているリストのデータを削除します</div><h1>入力について</h1><div>モードを\"Mode:Output\"に変更し入力したい場所にフォーカスを当てリストをダブルクリックしてください</div><h1>ファイルの読み取りとセーブについて</h1><div>本ソフトウェアのタイトルバー付近にある\"FILE (F)\"について説明します</div><div>\"FILE(F)\"の\"FILE OPEN\"でファイル選択ウィンドウが開きます</div><div>※ファイル選択については省略</div><div>開いたファイルの[CELEND]までを一つのデータとしリストに表示します</div><div>その際にメッセージボックスが開いてリストをリセットするか聞かれるので「はい」を選択とリストがリセットされ「いいえ」を選択するとそのまま追加されます</div><div>\"FILE(F)\"の\"FILE SAVE\"で同じようにファイル選択ウィンドウが開きます</div><div>開くと先ほどと同じようなファイルをリセットするかファイルの最後に追加するかを聞かれます</div><div>※選択後の説明は略</div><h1>設定ファイルについて</h1><div>本ソフトウェアと同じフォルダ（ディレクトリ）内にあるsetting(.ini)について説明します</div><div>このファイルは起動時に同じフォルダ内に見つからない場合新しく作成されます</div><div>それぞれのデータがどのように機能するかは多すぎるので書きません</div></body></html>"
+            );
+            system(std::filesystem::absolute(h::constGlobalData::HELPHTML).string().c_str());
+            return DefWindowProc(hwnd,msg,wp,lp);
+        }
+        
+    };
+    // class wndProcCMD_OpenSetting:public WndProcWM{
+    //     public:
+    //     LRESULT CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp)override;
+    // };
+    
+    class wndProcCMD :public WndProc{
+        private:
+        wndProcCMD_Add add_c;
+        wndProcCMD_Sub sub;
+        wndProcCMD_Open open;
+        wndProcCMD_Save save;
+        wndProcCMD_Help help;
+        // wndProcCMD_OpenSetting setting;
+        wndProcCMD_DBK dbk;
+        public:
+        inline LRESULT CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp)override{
+            if(!wms.count(wp))return DefWindowProc(hwnd,msg,wp,lp);
+            LRESULT l;
+            for(auto &obj:wms.at(wp)){
+                if(obj==nullptr)continue;
+                l=obj->Do(hwnd,msg,wp,lp);
+            }
+            return l;
+        }
+        wndProcCMD();
+    };
     class mainProc:public WndProc{
         public:
         enum HWNDS{
@@ -637,6 +694,7 @@ namespace h{
         wndProcWM_RBTNDown RBtnDown;
         wndProcWM_LBTNDown LBtnDown;
         wndProcWM_ColorEdit colorEdit;
+        wndProcCMD cmd;
         static ResizeManager rm;
         static OPENFILENAME ofn;
         static TCHAR path[MAX_PATH];
@@ -664,19 +722,34 @@ namespace h{
             add(WM_RBUTTONDOWN,&RBtnDown);
             add(WM_LBUTTONDOWN,&LBtnDown);
             add(WM_CTLCOLOREDIT,&colorEdit);
+            add(WM_COMMAND,&cmd);
         }
-
         static auto setHwnd(HWND hwnd,int n){
             return hwnds[n]=hwnd;
             }
         static auto getHwnd(int n){
             return hwnds[n];
         }
+        static auto fileOpen(){
+            return GetOpenFileName(&ofn);
+        }
+        static auto getPath(){
+            return path;
+        }
     };
     HWND mainProc::hwnds[list+1];
     ResizeManager mainProc::rm;
     OPENFILENAME mainProc::ofn{0};
     TCHAR mainProc::path[MAX_PATH];
+    wndProcCMD::wndProcCMD(){
+        add(mainProc::MSG::Add,&add_c);
+        add(mainProc::MSG::Sub,&sub);
+        add(mainProc::MSG::LIST_DBK,&dbk);
+        add(mainProc::MSG::MENU_FILE_OPEN,&open);
+        add(mainProc::MSG::MENU_FILE_SAVE,&save);
+        add(mainProc::MSG::MENU_HEIP,&help);
+        // add(mainProc::MSG::S,setting)
+    }
     LRESULT CALLBACK wndProcWM_Exit::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
             RECT rect;
             GetWindowRect(hwnd,&rect);
@@ -767,7 +840,43 @@ namespace h{
          }
          return DefWindowProc(hwnd,msg,wp,lp);
      }
+     inline LRESULT CALLBACK wndProcCMD_Add::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
+         auto str=h::replaceAll(h::getWindowStr(mainProc::getHwnd(mainProc::HWNDS::edit)),"\r\n",h::constGlobalData::REPLACE_ENTER);
+         SendMessage(mainProc::getHwnd(mainProc::HWNDS::list),WM_COMMAND,h::constGlobalData::LIST::PUSH,(LPARAM)&str);
+         return DefWindowProc(hwnd,msg,wp,lp);
+     }
+     inline LRESULT CALLBACK wndProcCMD_Sub::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
+         SendMessage(mainProc::getHwnd(mainProc::HWNDS::list),WM_COMMAND,h::constGlobalData::LIST::DELETE_ITEM,SendMessage(mainProc::getHwnd(mainProc::HWNDS::list),WM_COMMAND,h::constGlobalData::LIST::GET_SELECT_INDEX,0));
+         return DefWindowProc(hwnd,msg,wp,lp);
+    }
+    inline LRESULT CALLBACK wndProcCMD_DBK::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
+        h::pressKeyAll(h::stringToWstring(h::replaceAll(((std::string*)SendMessage(mainProc::getHwnd(mainProc::HWNDS::list),WM_COMMAND,h::constGlobalData::LIST::GET_ITEM,SendMessage(mainProc::getHwnd(mainProc::HWNDS::list),WM_COMMAND,h::constGlobalData::LIST::GET_SELECT_INDEX,0)))->c_str(),h::constGlobalData::REPLACE_ENTER,h::constGlobalData::ENTER)));
+         return DefWindowProc(hwnd,msg,wp,lp);
+    } 
+    inline LRESULT CALLBACK wndProcCMD_Open::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
+        if(!mainProc::fileOpen())return DefWindowProc(hwnd,msg,wp,lp);
+        auto l=((struct h::listData*)(SendMessage(mainProc::getHwnd(mainProc::HWNDS::list),WM_COMMAND,h::constGlobalData::LIST::GET_OBJ,0)))->list;
+        if(MessageBox(hwnd,TEXT("reset?"),TEXT("Question"),MB_ICONQUESTION|MB_YESNO)==IDNO){
+                auto a=h::split(h::File(mainProc::getPath()).read().getContent(),h::constGlobalData::CELEND);
+                l.insert(l.end(),a.begin(),a.end());
+        }
+        else{
+            l=h::split(h::File(mainProc::getPath()).read().getContent(),h::constGlobalData::CELEND);
+        }
+            ((struct h::listData*)(SendMessage(mainProc::getHwnd(mainProc::HWNDS::list),WM_COMMAND,h::constGlobalData::LIST::GET_OBJ,0)))->list=l;
+            SendMessage(((struct h::listData*)(SendMessage(mainProc::getHwnd(mainProc::HWNDS::list),WM_COMMAND,h::constGlobalData::LIST::GET_OBJ,0)))->scroll,WM_COMMAND,h::constGlobalData::SCROLL::SET_END,l.size());
+        InvalidateRect(mainProc::getHwnd(mainProc::HWNDS::list),NULL,TRUE);
+        UpdateWindow(mainProc::getHwnd(mainProc::HWNDS::list));
+        return DefWindowProc(hwnd,msg,wp,lp);
+    }
+    
+    inline LRESULT CALLBACK wndProcCMD_Save::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
+        if(!mainProc::fileOpen())return DefWindowProc(hwnd,msg,wp,lp);
+        h::File(mainProc::getPath()).write(h::vecToString(((struct h::listData*)(SendMessage(mainProc::getHwnd(mainProc::HWNDS::list),WM_COMMAND,h::constGlobalData::LIST::GET_OBJ,0)))->list,h::constGlobalData::CELEND),MessageBox(hwnd,TEXT("reset?"),TEXT("Question"),MB_ICONQUESTION|MB_YESNO)==IDYES);
+        return DefWindowProc(hwnd,msg,wp,lp);
+    }
 };
+
 
 int CALLBACK EnumFontFamProc(LOGFONT *lf,TEXTMETRIC * tm,DWORD fontType,LPARAM lp){
     if(h::global::vecStr==nullptr)return 0;
@@ -1183,33 +1292,6 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     // switch(msg){
     //     case WM_COMMAND:
     //         switch(LOWORD(wp)){
-    //             case MSG::Add:
-    //                 str=h::replaceAll(h::getWindowStr(edit),"\r\n",REPLACE_ENTER);
-    //                 SendMessage(list,WM_COMMAND,h::constGlobalData::LIST::PUSH,(LPARAM)&str);
-    //             break;
-    //             case MSG::Sub:
-    //                 SendMessage(list,WM_COMMAND,h::constGlobalData::LIST::DELETE_ITEM,SendMessage(list,WM_COMMAND,h::constGlobalData::LIST::GET_SELECT_INDEX,0));
-    //             break;
-    //             case MSG::LIST_DBK:
-    //                 h::pressKeyAll(h::stringToWstring(h::replaceAll(((std::string*)SendMessage(list,WM_COMMAND,h::constGlobalData::LIST::GET_ITEM,SendMessage(list,WM_COMMAND,h::constGlobalData::LIST::GET_SELECT_INDEX,0)))->c_str(),REPLACE_ENTER,h::constGlobalData::ENTER)));
-    //             break;
-    //             case MSG::MENU_FILE_OPEN:
-    //                 if(!GetOpenFileName(&ofn))break;
-    //                 {
-    //                 auto l=((struct h::listData*)(SendMessage(list,WM_COMMAND,h::constGlobalData::LIST::GET_OBJ,0)))->list;
-    //                 if(MessageBox(hwnd,TEXT("reset?"),TEXT("Question"),MB_ICONQUESTION|MB_YESNO)==IDNO){
-    //                         auto a=h::split(h::File(path).read().getContent(),CELEND);
-    //                         l.insert(l.end(),a.begin(),a.end());
-    //                 }
-    //                 else{
-    //                     l=h::split(h::File(path).read().getContent(),CELEND);
-    //                 }
-    //                     ((struct h::listData*)(SendMessage(list,WM_COMMAND,h::constGlobalData::LIST::GET_OBJ,0)))->list=l;
-    //                     SendMessage(((struct h::listData*)(SendMessage(list,WM_COMMAND,h::constGlobalData::LIST::GET_OBJ,0)))->scroll,WM_COMMAND,h::constGlobalData::SCROLL::SET_END,l.size());
-    //                 }
-    //                 InvalidateRect(list,NULL,TRUE);
-    //                 UpdateWindow(list);
-    //             break;
     //             case MSG::MENU_FILE_SAVE:
     //                 if(!GetOpenFileName(&ofn))break;
     //                 h::File(path).write(h::vecToString(((struct h::listData*)(SendMessage(list,WM_COMMAND,h::constGlobalData::LIST::GET_OBJ,0)))->list,CELEND),MessageBox(hwnd,TEXT("reset?"),TEXT("Question"),MB_ICONQUESTION|MB_YESNO)==IDYES);
