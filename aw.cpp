@@ -155,7 +155,6 @@ namespace h{
         if(0>hash||until+hash>str.size())return noMatch;
         return str.substr(hash,until);
         }
-
         namespace cast{
         template <class T>
         inline std::string toString(const T str)noexcept(true){
@@ -206,15 +205,12 @@ namespace h{
     inline auto replaceAll(const std::string str,const std::string beforeStr,const std::string afterStr)noexcept(true){
         return std::regex_replace(str,std::regex(beforeStr),afterStr);
     }
-
     inline std::wstring stringToWstring(const std::string str)noexcept(true){
         const int BUFSIZE=MultiByteToWideChar(CP_ACP,0,str.c_str(),-1,(wchar_t*)NULL,0);
         std::unique_ptr<wchar_t> wtext(new wchar_t[BUFSIZE]);
         MultiByteToWideChar(CP_ACP,0,str.c_str(),-1,wtext.get(),BUFSIZE);
         return std::wstring(wtext.get(),wtext.get()+BUFSIZE-1);
     }
-
-
     inline auto pressKeyAll(const std::wstring str)noexcept(true){
         constexpr int DATACOUNT=1;
         constexpr int ENTERWIDE=L'\n';
@@ -888,6 +884,79 @@ namespace h{
         CreateWindow(TEXT(h::constGlobalData::SETTING_WINDOW),TEXT(h::constGlobalData::SETTING_WINDOW),WS_VISIBLE|WS_OVERLAPPEDWINDOW|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,CW_USEDEFAULT,CW_USEDEFAULT,CW_USEDEFAULT,CW_USEDEFAULT,NULL,NULL,(HINSTANCE)GetModuleHandle(0),NULL);
         return DefWindowProc(hwnd,msg,wp,lp);
     }
+class btnProcWM_LBTNDown:public WndProcWM{
+    inline LRESULT CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp);
+};
+class btnProcWM_LBTNUp:public WndProcWM{
+    inline LRESULT CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp);
+};
+class btnProcWM_Paint:public WndProcWM{
+    inline LRESULT  CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp);
+};
+class btnProcCmd_Set:public WndProcWM{
+    inline LRESULT  CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp)override;
+};
+class btnProcCmd:public wndProcCMD{
+    private:
+    btnProcCmd_Set set;
+    public:
+    btnProcCmd(){
+        add(h::constGlobalData::BTN::SET_BTN,&set);
+    }
+};
+class btnProc:public WndProc{
+    private:
+    static std::unordered_map<HWND,btnData> data;
+    btnProcWM_LBTNDown lBtnDown;
+    btnProcWM_LBTNUp lBtnUp;
+    btnProcWM_Paint paint;
+    btnProcCmd cmd;
+    public:
+    static auto &get(HWND hwnd){
+        return data[hwnd];
+    }
+    btnProc(){
+        add(WM_LBUTTONDOWN,&lBtnDown);
+        add(WM_LBUTTONUP,&lBtnUp);
+        add(WM_PAINT,&paint);
+        add(WM_COMMAND,&cmd);
+    }
+};
+std::unordered_map<HWND,btnData> btnProc::data;
+inline LRESULT CALLBACK btnProcWM_LBTNDown::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
+    btnProc::get(hwnd).flag=true;
+    InvalidateRect(hwnd,NULL,TRUE);
+    UpdateWindow(hwnd);
+    return DefWindowProc(hwnd,msg,wp,lp);
+}
+inline LRESULT CALLBACK btnProcWM_LBTNUp::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
+        btnProc::get(hwnd).flag=false;
+    InvalidateRect(hwnd,NULL,TRUE);
+    UpdateWindow(hwnd);
+    if(GetParent(hwnd)==NULL)return DefWindowProc(hwnd,msg,wp,lp);
+    SendMessage(GetParent(hwnd),WM_COMMAND,MAKEWPARAM(btnProc::get(hwnd).msg,0),0);
+    return DefWindowProc(hwnd,msg,wp,lp);
+}
+inline LRESULT CALLBACK btnProcWM_Paint::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
+    RECT rect;
+    PAINTSTRUCT ps;
+    GetClientRect(hwnd,&rect);
+    auto hdc=BeginPaint(hwnd,&ps);
+    SetTextColor(hdc,h::customBool(btnProc::get(hwnd).flag,h::global::bkBrush.getBase(),h::global::borderBrush.getBase()));
+    SetBkColor(hdc,h::customBool(btnProc::get(hwnd).flag,h::global::borderBrush.getBase(),h::global::bkBrush.getBase()));
+    SelectObject(hdc,h::global::bkBrush.getCreated());
+    Rectangle(hdc,0,0,rect.right,rect.bottom);
+    SelectObject(hdc,h::global::font.setHeight(rect.bottom/2).getCreated());
+    DrawText(hdc,h::getWindowStr(hwnd).c_str(),-1,&rect,DT_CENTER|DT_WORDBREAK|DT_VCENTER);
+    FrameRect(hdc,&rect,h::customBool(btnProc::get(hwnd).flag,h::global::bkBrush.getCreated(),h::global::borderBrush.getCreated()));
+    EndPaint(hwnd,&ps);
+    return DefWindowProc(hwnd,msg,wp,lp);
+}
+inline LRESULT  CALLBACK btnProcCmd_Set::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
+            btnProc::get(hwnd).flag=((struct h::btnData*)lp)->flag;    
+            btnProc::get(hwnd).msg=((struct h::btnData*)lp)->msg;
+            return DefWindowProc(hwnd,msg,wp,lp);
+}
 };
 
 
@@ -1187,49 +1256,7 @@ LRESULT CALLBACK listProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     return DefWindowProc(hwnd,msg,wp,lp);
 }
 LRESULT CALLBACK btnProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
-    PAINTSTRUCT ps;
-    HDC hdc;
-    RECT rect;
-    HBRUSH defb;
-    static std::unordered_map<HWND,h::btnData> data;
-    switch(msg){
-        case WM_LBUTTONDOWN:
-        data[hwnd].flag=true;
-        InvalidateRect(hwnd,NULL,TRUE);
-        UpdateWindow(hwnd);
-        break;
-        case WM_LBUTTONUP:
-        data[hwnd].flag=false;
-        InvalidateRect(hwnd,NULL,TRUE);
-        UpdateWindow(hwnd);
-        if(GetParent(hwnd)==NULL)break;
-        SendMessage(GetParent(hwnd),WM_COMMAND,MAKEWPARAM(data[hwnd].msg,0),0);
-        break;
-        case WM_PAINT:
-        GetClientRect(hwnd,&rect);
-        hdc=BeginPaint(hwnd,&ps);
-        {
-        SetTextColor(hdc,h::customBool(data[hwnd].flag,h::global::bkBrush.getBase(),h::global::borderBrush.getBase()));
-        SetBkColor(hdc,h::customBool(data[hwnd].flag,h::global::borderBrush.getBase(),h::global::bkBrush.getBase()));
-        defb=HBRUSH(SelectObject(hdc,h::customBool(data[hwnd].flag,h::global::borderBrush.getCreated(),h::global::bkBrush.getCreated())));
-        }
-        Rectangle(hdc,0,0,rect.right,rect.bottom);
-        SelectObject(hdc,h::global::font.setHeight(rect.bottom/2).getCreated());
-        DrawText(hdc,h::getWindowStr(hwnd).c_str(),-1,&rect,DT_CENTER|DT_WORDBREAK|DT_VCENTER);
-        FrameRect(hdc,&rect,h::customBool(data[hwnd].flag,h::global::bkBrush.getCreated(),h::global::borderBrush.getCreated()));
-        SelectObject(hdc,defb);
-        EndPaint(hwnd,&ps);
-        break;
-        case WM_COMMAND:
-        switch(wp){
-            case h::constGlobalData::BTN::SET_BTN:
-            data[hwnd].flag=((struct h::btnData*)lp)->flag;    
-            data[hwnd].msg=((struct h::btnData*)lp)->msg;
-            break;
-        }
-        break;
-    }
-    return DefWindowProc(hwnd,msg,wp,lp);
+    return h::btnProc().Do(hwnd,msg,wp,lp);
 }
 LRESULT CALLBACK titleProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     RECT rect;
