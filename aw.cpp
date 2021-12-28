@@ -1222,9 +1222,8 @@ namespace h{
         return DefWindowProc(hwnd,msg,wp,lp);
     }
     LRESULT  CALLBACK listProcWM_DBC::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
-        MessageBox(0,cast::toString(listProc::get()[hwnd].active).c_str(),0,0);
         if(GetParent(hwnd)==NULL)return DefWindowProc(hwnd,msg,wp,lp);
-        SendMessage(GetParent(hwnd),WM_COMMAND,MAKEWPARAM(listProc::get()[hwnd].msg,listProc::get()[hwnd].msg),0);
+        SendMessage(GetParent(hwnd),WM_COMMAND,listProc::get()[hwnd].msg,0);
         return DefWindowProc(hwnd,msg,wp,lp);
     }   
     LRESULT  CALLBACK listProcWM_Paint::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
@@ -1377,7 +1376,7 @@ namespace h{
             add(WM_PAINT,&paintOfFrame);
             add(WM_SIZE,&resize);
         }
-    };//class a:public getter and setter 
+    };
     HWND settingProc::hwnds[settingProc::HWNDS::fontList+1];
     ResizeManager settingProc::rm;
     settingProcCMD::settingProcCMD(){
@@ -1461,7 +1460,7 @@ namespace h{
         }
 
     };
-    class scrollProc:public WndProc{//std::unordered_map<hwnd,T>data
+    class scrollProc:public WndProc{
         private:
         static std::unordered_map<HWND,scrollData> data;
         scrollProcWM_Destroy destroy;
