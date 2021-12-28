@@ -1126,6 +1126,184 @@ namespace h{
         }
         return 0;
     }
+    class listProcWM_LBtnDown:public WndProcWM{
+        LRESULT  CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp)override;
+    };
+    class listProcWM_DBC:public WndProcWM{
+        LRESULT  CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp)override;
+    };
+    class listProcWM_Paint:public WndProcWM{
+        public:
+        LRESULT  CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp)override;
+    };
+    class listProcCmd_Push:public WndProcWM{
+        public:
+        LRESULT  CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp)override;
+    };
+    
+    class listProcCmd_Set:public WndProcWM{
+        public:
+        LRESULT  CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp)override;
+    };
+    class listProcCmd_GetSelectIndex:public WndProcWM{
+        public:
+        LRESULT  CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp)override;
+    };
+    class listProcCmd_GetItem:public WndProcWM{
+        public:
+        LRESULT  CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp)override;
+    };
+    class listProcCmd_GetObj:public WndProcWM{
+        public:
+        LRESULT  CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp)override;
+    };
+    class listProcCmd_Delete:public WndProcWM{
+        public:
+        LRESULT  CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp)override;
+    };
+    class listProcCmd_Change:public WndProcWM{
+        public:
+        LRESULT  CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp)override{
+            InvalidateRect(hwnd,NULL,TRUE);
+            UpdateWindow(hwnd);
+            return DefWindowProc(hwnd,msg,wp,lp);
+        }
+    };
+    class listProcCmd:public wndProcCMD{
+        private:
+        listProcCmd_Set set;
+        listProcCmd_Push push;
+        listProcCmd_GetSelectIndex index;
+        listProcCmd_GetItem item;
+        listProcCmd_GetObj obj;
+        listProcCmd_Delete deleteItem;
+        listProcCmd_Change change;
+        public:
+        listProcCmd(){
+            add(h::constGlobalData::LIST::SET_LIST,&set);
+            add(h::constGlobalData::LIST::PUSH,&push);
+            add(h::constGlobalData::LIST::GET_SELECT_INDEX,&index);
+            add(h::constGlobalData::LIST::GET_ITEM,&item);
+            add(h::constGlobalData::LIST::GET_OBJ,&obj);
+            add(h::constGlobalData::LIST::DELETE_ITEM,&deleteItem);
+            add(h::constGlobalData::SCROLL::CHANGE,&change);
+        }
+    };
+    class listProc:public WndProc{
+        private:
+        static std::unordered_map<HWND,listData> data;
+        static std::string str;
+        listProcWM_DBC dbc;
+        listProcWM_LBtnDown lBtnDown;
+        listProcWM_Paint paint;
+        listProcCmd cmd;
+        public:
+        static auto &get(){
+            return data;
+        }
+        static auto &getStr(){
+            return str;
+        }
+        listProc(){
+            add(WM_LBUTTONDBLCLK,&dbc);
+            add(WM_LBUTTONDOWN,&lBtnDown);
+            add(WM_PAINT,&paint);
+            add(WM_COMMAND,&cmd);
+        }
+    };
+    decltype(listProc::data) listProc::data;
+    std::string listProc::str;
+    LRESULT  CALLBACK listProcWM_LBtnDown::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
+        RECT rect;
+        GetClientRect(hwnd,&rect);
+        listProc::get()[hwnd].active=(MAKEPOINTS(lp).y/static_cast<double>(rect.bottom)/listProc::get()[hwnd].showItem)+SendMessage(listProc::get()[hwnd].scroll,WM_COMMAND,h::constGlobalData::SCROLL::GET_SCROLL,0)-1;
+        InvalidateRect(hwnd,NULL,TRUE);
+        UpdateWindow(hwnd);
+        return DefWindowProc(hwnd,msg,wp,lp);
+    }
+    LRESULT  CALLBACK listProcWM_DBC::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
+        if(GetParent(hwnd)==NULL)return DefWindowProc(hwnd,msg,wp,lp);;
+        SendMessage(GetParent(hwnd),WM_COMMAND,MAKEWPARAM(listProc::get()[hwnd].msg,listProc::get()[hwnd].msg),0);
+        return DefWindowProc(hwnd,msg,wp,lp);
+    }   
+    LRESULT  CALLBACK listProcWM_Paint::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
+        RECT rect;
+        PAINTSTRUCT ps;
+        GetClientRect(hwnd,&rect);
+        auto hdc=BeginPaint(hwnd,&ps);
+        SetTextColor(hdc,h::global::borderBrush.getBase());
+        SetBkColor(hdc,h::global::bkBrush.getBase());
+        int oneSize=static_cast<double>(rect.bottom)/listProc::get()[hwnd].showItem;
+        SelectObject(hdc,h::global::font.setHeight(oneSize).getCreated());
+        for(int hash=SendMessage(listProc::get()[hwnd].scroll,WM_COMMAND,h::constGlobalData::SCROLL::GET_SCROLL,0),i=1;hash<listProc::get()[hwnd].list.size()&&i<listProc::get()[hwnd].showItem;++hash,++i){
+            if(hash==listProc::get()[hwnd].active){
+                SetTextColor(hdc,h::global::bkBrush.getBase());
+                SetBkColor(hdc,h::global::borderBrush.getBase());
+                TextOut(hdc,0,oneSize*i,listProc::get()[hwnd].list[hash].c_str(),listProc::get()[hwnd].list[hash].size());
+                SetTextColor(hdc,h::global::borderBrush.getBase());
+                SetBkColor(hdc,h::global::bkBrush.getBase());
+                continue;
+            }
+            TextOut(hdc,0,oneSize*i,listProc::get()[hwnd].list[hash].c_str(),listProc::get()[hwnd].list[hash].size());
+        }
+        for(int i=0,max=oneSize;i<max;++i){
+            RECT item{
+                0,
+                static_cast<int>((oneSize)*i),
+                rect.right,
+                static_cast<int>((oneSize)*(i+1))
+            };
+            FrameRect(hdc,&item,h::global::borderBrush.getCreated());
+        }
+        EndPaint(hwnd,&ps);
+        return DefWindowProc(hwnd,msg,wp,lp);
+    }
+    LRESULT  CALLBACK listProcCmd_Set::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
+        RECT rect;
+        listProc::get()[hwnd].active=((struct h::listData*)lp)->active;
+        listProc::get()[hwnd].list=((struct h::listData*)lp)->list;
+        listProc::get()[hwnd].showItem=((struct h::listData*)lp)->showItem;
+        listProc::get()[hwnd].msg=((struct h::listData*)lp)->msg;
+        GetClientRect(hwnd,&rect);
+        if(listProc::get()[hwnd].scroll==NULL)
+        listProc::get()[hwnd].scroll=CreateWindowEx(WS_EX_TOPMOST,TEXT(h::constGlobalData::SCROLL_WINDOW),TEXT("Height"),WS_CHILD|WS_VISIBLE|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,0,0,rect.right,static_cast<double>(rect.bottom)/listProc::get()[hwnd].showItem,hwnd,NULL,(HINSTANCE)GetModuleHandle(0),NULL);
+        h::scrollData scrollData{0,static_cast<int>(listProc::get()[hwnd].list.size()),0,0,false};
+        SendMessage(listProc::get()[hwnd].scroll,WM_COMMAND,h::constGlobalData::SCROLL::SET,(LPARAM)&scrollData);
+        return DefWindowProc(hwnd,msg,wp,lp);
+    }
+    LRESULT  CALLBACK listProcCmd_Push::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
+            listProc::get()[hwnd].list.push_back(((std::string*)lp)->c_str());
+            SendMessage(listProc::get()[hwnd].scroll,WM_COMMAND,h::constGlobalData::SCROLL::SET_END,listProc::get()[hwnd].list.size());
+            InvalidateRect(hwnd,NULL,TRUE);
+            UpdateWindow(hwnd);
+            return DefWindowProc(hwnd,msg,wp,lp);
+    }
+    LRESULT  CALLBACK listProcCmd_GetSelectIndex::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
+        if(0>listProc::get()[hwnd].active||listProc::get()[hwnd].list.size()<=listProc::get()[hwnd].active){
+            return (LONG)0;
+        }
+        return (LONG)listProc::get()[hwnd].active;
+    }
+    LRESULT  CALLBACK listProcCmd_GetItem::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
+        if(0>listProc::get()[hwnd].active||listProc::get()[hwnd].list.size()<=listProc::get()[hwnd].active){
+            return (LONG)&listProc::getStr();
+        }
+        return (LONG)&listProc::get()[hwnd].list[lp];
+    }
+    LRESULT  CALLBACK listProcCmd_GetObj::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
+        return (LONG)&listProc::get()[hwnd];
+    }
+    LRESULT  CALLBACK listProcCmd_Delete::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
+        if(0>lp||listProc::get()[hwnd].list.size()<=lp){
+            return DefWindowProc(hwnd,msg,wp,lp);;
+        }
+        listProc::get()[hwnd].list.erase(listProc::get()[hwnd].list.begin()+lp);
+        SendMessage(listProc::get()[hwnd].scroll,WM_COMMAND,h::constGlobalData::SCROLL::SET_END,listProc::get()[hwnd].list.size());
+        InvalidateRect(hwnd,NULL,TRUE);
+        UpdateWindow(hwnd);        
+        return DefWindowProc(hwnd,msg,wp,lp);
+    }
+
 };
 int CALLBACK EnumFontFamProc(LOGFONT *lf,TEXTMETRIC * tm,DWORD fontType,LPARAM lp){
     if(h::global::vecStr==nullptr)return 0;
@@ -1361,113 +1539,7 @@ LRESULT CALLBACK settingProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     return h::settingProc().Do(hwnd,msg,wp,lp);
 }
 LRESULT CALLBACK listProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
-    static std::unordered_map<HWND,h::listData> data;
-    static std::string str;
-    RECT rect;
-    HDC hdc;
-    PAINTSTRUCT ps;
-    int oneSize;
-    switch(msg){
-        case WM_CREATE:
-        data[hwnd];
-        break;
-        case WM_LBUTTONDOWN:
-        GetClientRect(hwnd,&rect);
-        oneSize=static_cast<double>(rect.bottom)/data[hwnd].showItem;
-        data[hwnd].active=(MAKEPOINTS(lp).y/oneSize)+SendMessage(data[hwnd].scroll,WM_COMMAND,h::constGlobalData::SCROLL::GET_SCROLL,0)-1;
-        InvalidateRect(hwnd,NULL,TRUE);
-        UpdateWindow(hwnd);
-        break;
-        case WM_LBUTTONDBLCLK:
-        if(GetParent(hwnd)==NULL)break;
-        SendMessage(GetParent(hwnd),WM_COMMAND,MAKEWPARAM(data[hwnd].msg,data[hwnd].msg),0);
-        break;
-        case WM_PAINT:
-        GetClientRect(hwnd,&rect);
-        hdc=BeginPaint(hwnd,&ps);
-        SetTextColor(hdc,h::global::borderBrush.getBase());
-        SetBkColor(hdc,h::global::bkBrush.getBase());
-        {
-            oneSize=static_cast<double>(rect.bottom)/data[hwnd].showItem;
-            SelectObject(hdc,h::global::font.setHeight(oneSize).getCreated());
-            for(int hash=SendMessage(data[hwnd].scroll,WM_COMMAND,h::constGlobalData::SCROLL::GET_SCROLL,0),i=1;hash<data[hwnd].list.size()&&i<data[hwnd].showItem;++hash,++i){
-                if(hash==data[hwnd].active){
-                    SetTextColor(hdc,h::global::bkBrush.getBase());
-                    SetBkColor(hdc,h::global::borderBrush.getBase());
-                    TextOut(hdc,0,oneSize*i,data[hwnd].list[hash].c_str(),data[hwnd].list[hash].size());
-                    SetTextColor(hdc,h::global::borderBrush.getBase());
-                    SetBkColor(hdc,h::global::bkBrush.getBase());
-                    continue;
-                }
-                TextOut(hdc,0,oneSize*i,data[hwnd].list[hash].c_str(),data[hwnd].list[hash].size());
-            }
-            SelectObject(hdc,GetStockObject(SYSTEM_FONT));
-        }
-        for(int i=0,max=oneSize;i<max;++i){
-            RECT item{
-                0,
-                static_cast<int>((oneSize)*i),
-                rect.right,
-                static_cast<int>((oneSize)*(i+1))
-            };
-            FrameRect(hdc,&item,h::global::borderBrush.getCreated());
-        }
-        EndPaint(hwnd,&ps);
-        break;
-        case WM_COMMAND:
-        switch(wp){
-            case h::constGlobalData::LIST::SET_LIST:
-            data[hwnd].active=((struct h::listData*)lp)->active;
-            data[hwnd].list=((struct h::listData*)lp)->list;
-            data[hwnd].showItem=((struct h::listData*)lp)->showItem;
-            data[hwnd].msg=((struct h::listData*)lp)->msg;
-            {
-                GetClientRect(hwnd,&rect);
-                oneSize=static_cast<double>(rect.bottom)/data[hwnd].showItem;
-                if(data[hwnd].scroll==NULL)
-                data[hwnd].scroll=CreateWindowEx(WS_EX_TOPMOST,TEXT(h::constGlobalData::SCROLL_WINDOW),TEXT("Height"),WS_CHILD|WS_VISIBLE|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,0,0,rect.right,oneSize,hwnd,NULL,(HINSTANCE)GetModuleHandle(0),NULL);
-                h::scrollData scrollData{0,static_cast<int>(data[hwnd].list.size()),0,0,false};
-                SendMessage(data[hwnd].scroll,WM_COMMAND,h::constGlobalData::SCROLL::SET,(LPARAM)&scrollData);
-            }
-            break;
-            case h::constGlobalData::LIST::PUSH:
-                data[hwnd].list.push_back(((std::string*)lp)->c_str());
-                SendMessage(data[hwnd].scroll,WM_COMMAND,h::constGlobalData::SCROLL::SET_END,data[hwnd].list.size());
-                InvalidateRect(hwnd,NULL,TRUE);
-                UpdateWindow(hwnd);
-            break;
-            case h::constGlobalData::LIST::GET_SELECT_INDEX:
-                if(0>data[hwnd].active||data[hwnd].list.size()<=data[hwnd].active){
-                    return (LONG)0;
-                }
-                return (LONG)data[hwnd].active;
-            break;
-            case h::constGlobalData::LIST::GET_ITEM:
-                if(0>data[hwnd].active||data[hwnd].list.size()<=data[hwnd].active){
-                    return (LONG)&str;
-                }
-            return (LONG)&data[hwnd].list[lp];
-            break;
-            case h::constGlobalData::LIST::GET_OBJ:
-                return (LONG)&data[hwnd];
-            break;
-            case h::constGlobalData::LIST::DELETE_ITEM:
-                if(0>lp||data[hwnd].list.size()<=lp){
-                    break;
-                }
-                data[hwnd].list.erase(data[hwnd].list.begin()+lp);
-                SendMessage(data[hwnd].scroll,WM_COMMAND,h::constGlobalData::SCROLL::SET_END,data[hwnd].list.size());
-                InvalidateRect(hwnd,NULL,TRUE);
-                UpdateWindow(hwnd);
-            break;
-            case h::constGlobalData::SCROLL::CHANGE:
-                InvalidateRect(hwnd,NULL,TRUE);
-                UpdateWindow(hwnd);
-            break;
-        }
-        break;
-    }
-    return DefWindowProc(hwnd,msg,wp,lp);
+    return h::listProc().Do(hwnd,msg,wp,lp);
 }
 LRESULT CALLBACK btnProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     return h::btnProc().Do(hwnd,msg,wp,lp);
