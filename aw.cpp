@@ -155,13 +155,13 @@ namespace h{
         bool beMapItem(T &map,typename T::key_type key){
             return map.count(key);
         }
-        // template <class T>
-        // inline void noHitMapValueReplace(T &map, typename T::key_type key, typename T::mapped_type replace=typename T::mapped_type()){
-        //     if(!beMapItem(map,key))map.emplace(key,replace);
-        //     // return map;
-        // }
         template <class T>
-        inline T noHitMapValueReplace(T map, typename T::key_type key, typename T::mapped_type replace=typename T::mapped_type()){
+        inline T &noHitMapValueReplace(T &map, typename T::key_type key, typename T::mapped_type replace=typename T::mapped_type()){
+            if(!beMapItem(map,key))map.emplace(key,replace);
+            return map;
+        }
+        template <class T>
+        inline T returnNoHitMapValueReplace(T map, typename T::key_type key, typename T::mapped_type replace=typename T::mapped_type()){
             if(!beMapItem(map,key))map.emplace(key,replace);
             return map;
         }
@@ -226,7 +226,7 @@ namespace h{
         for(auto &key:str){
            input.ki.wScan=key;
            input.ki.wVk=0;
-           noHitMapValueReplace(std::unordered_map<wchar_t,std::function<void()> >{
+           returnNoHitMapValueReplace(std::unordered_map<wchar_t,std::function<void()> >{
                {
                    ENTERWIDE,[&]()->void{
                     input.ki.wScan=VK_RETURN;
@@ -503,31 +503,57 @@ namespace h{
     namespace global{
     POINT now,
           hash;
+    int flagMouseWndEvent;
+    enum MOUSEWNDEVENT{
+        RESIZE_RB,
+        RESIZE_LT,
+        MOVE
     };
-    VOID CALLBACK resizeRBProc(HWND hwnd , UINT uMsg ,UINT idEvent , DWORD dwTime) {
+    };
+    VOID CALLBACK mouseWndEventProc(HWND hwnd , UINT uMsg ,UINT idEvent , DWORD dwTime) {
     if(0<=GetAsyncKeyState(VK_LBUTTON)){
         KillTimer(hwnd,idEvent);
     }
     POINT pos;
     GetCursorPos(&pos);
-    MoveWindow(hwnd,h::global::now.x,h::global::now.y,pos.x-h::global::now.x+1,pos.y-h::global::now.y+1,TRUE);
+    std::unordered_map<int,std::function<void()> >{
+        {global::MOUSEWNDEVENT::MOVE,[&]()->void{
+            MoveWindow(hwnd,pos.x-h::global::hash.x,pos.y-h::global::hash.y,h::global::now.x,h::global::now.y,TRUE);
+        }},
+        {global::MOUSEWNDEVENT::RESIZE_LT,[&]()->void{
+            MoveWindow(hwnd,pos.x,pos.y,h::global::now.x-pos.x,h::global::now.y-pos.y,TRUE);
+        }},
+        {global::MOUSEWNDEVENT::RESIZE_RB,[&]()->void{
+            MoveWindow(hwnd,h::global::now.x,h::global::now.y,pos.x-h::global::now.x+1,pos.y-h::global::now.y+1,TRUE);
+        }}
+
+    }[global::flagMouseWndEvent]();
     }
-    VOID CALLBACK resizeLTProc(HWND hwnd , UINT uMsg ,UINT idEvent , DWORD dwTime) {
-        if(0<=GetAsyncKeyState(VK_LBUTTON)){
-            KillTimer(hwnd,idEvent);
-        }
-        POINT pos;
-        GetCursorPos(&pos);
-        MoveWindow(hwnd,pos.x,pos.y,h::global::now.x-pos.x,h::global::now.y-pos.y,TRUE);
-    }
-    VOID CALLBACK moveProc(HWND hwnd , UINT uMsg ,UINT idEvent , DWORD dwTime) {
-        if(0<=GetAsyncKeyState(VK_LBUTTON)){
-            KillTimer(hwnd,idEvent);
-        }
-        POINT pos;
-        GetCursorPos(&pos);
-        MoveWindow(hwnd,pos.x-h::global::hash.x,pos.y-h::global::hash.y,h::global::now.x,h::global::now.y,TRUE);
-    }
+    
+    // VOID CALLBACK resizeRBProc(HWND hwnd , UINT uMsg ,UINT idEvent , DWORD dwTime) {
+    // if(0<=GetAsyncKeyState(VK_LBUTTON)){
+    //     KillTimer(hwnd,idEvent);
+    // }
+    // POINT pos;
+    // GetCursorPos(&pos);
+    // MoveWindow(hwnd,h::global::now.x,h::global::now.y,pos.x-h::global::now.x+1,pos.y-h::global::now.y+1,TRUE);
+    // }
+    // VOID CALLBACK resizeLTProc(HWND hwnd , UINT uMsg ,UINT idEvent , DWORD dwTime) {
+    //     if(0<=GetAsyncKeyState(VK_LBUTTON)){
+    //         KillTimer(hwnd,idEvent);
+    //     }
+    //     POINT pos;
+    //     GetCursorPos(&pos);
+    //     MoveWindow(hwnd,pos.x,pos.y,h::global::now.x-pos.x,h::global::now.y-pos.y,TRUE);
+    // }
+    // VOID CALLBACK moveProc(HWND hwnd , UINT uMsg ,UINT idEvent , DWORD dwTime) {
+    //     if(0<=GetAsyncKeyState(VK_LBUTTON)){
+    //         KillTimer(hwnd,idEvent);
+    //     }
+    //     POINT pos;
+    //     GetCursorPos(&pos);
+    //     MoveWindow(hwnd,pos.x-h::global::hash.x,pos.y-h::global::hash.y,h::global::now.x,h::global::now.y,TRUE);
+    // }
     BOOL CALLBACK addGlobalHwndsChild(HWND hwnd,LPARAM lp){
     h::global::hwnds.push_back(hwnd);
     return TRUE;
@@ -804,7 +830,6 @@ namespace h{
             mainProc::setOwner(hwnd);
             EnumChildWindows(hwnd,addGlobalHwndsChild,0);
             mainProc::setRm(hwnd,h::global::hwnds);
-
         return DefWindowProc(hwnd,msg,wp,lp);
     }
      inline LRESULT CALLBACK wndProcWM_Resize::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
@@ -826,7 +851,8 @@ namespace h{
                  GetWindowRect(hwnd,&rect);
              h::global::now.x=rect.right;
              h::global::now.y=rect.bottom;
-             SetTimer(hwnd,mainProc::TIMER::RESIZE_LT,h::constGlobalData::MOUSE_UPDATA_COUNT,resizeLTProc);        
+             global::flagMouseWndEvent=global::MOUSEWNDEVENT::RESIZE_LT;
+             SetTimer(hwnd,mainProc::TIMER::RESIZE_LT,h::constGlobalData::MOUSE_UPDATA_COUNT,mouseWndEventProc);        
              return DefWindowProc(hwnd,msg,wp,lp);
          }
          GetWindowRect(mainProc::getHwnd(mainProc::HWNDS::sub),&rect);
@@ -834,7 +860,8 @@ namespace h{
              GetWindowRect(hwnd,&rect);
              h::global::now.x=rect.left;
              h::global::now.y=rect.top;
-             SetTimer(hwnd,mainProc::TIMER::RESIZE_RB,h::constGlobalData::MOUSE_UPDATA_COUNT,resizeRBProc);
+             global::flagMouseWndEvent=global::MOUSEWNDEVENT::RESIZE_RB;
+             SetTimer(hwnd,mainProc::TIMER::RESIZE_RB,h::constGlobalData::MOUSE_UPDATA_COUNT,mouseWndEventProc);
          }
          return DefWindowProc(hwnd,msg,wp,lp);
      }
@@ -1036,7 +1063,8 @@ namespace h{
         h::global::hash.y=pos.y-rect.top;
         h::global::now.x=rect.right-rect.left;
         h::global::now.y=rect.bottom-rect.top;
-        SetTimer(GetParent(hwnd),titleProc::constData::MOVEID,h::constGlobalData::MOUSE_UPDATA_COUNT,h::moveProc);
+        global::flagMouseWndEvent=global::MOUSEWNDEVENT::MOVE;
+        SetTimer(GetParent(hwnd),titleProc::constData::MOVEID,h::constGlobalData::MOUSE_UPDATA_COUNT,h::mouseWndEventProc);
         return DefWindowProc(hwnd,msg,wp,lp);
     }
     inline LRESULT  CALLBACK titleProcWM_Create::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
@@ -1568,13 +1596,14 @@ int WINAPI WinMain(HINSTANCE hInstance,HINSTANCE hPrevInstance,PSTR lpCmdLine,in
     h::baseStyle(listProc,h::constGlobalData::SIMPLELIST_WINDOW);
     h::baseStyle(titleProc,"title");
     h::baseStyle(menuProc,"MENU");
-    auto re=h::StrToInt(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(h::constGlobalData::SECTION_POS,MAINWINDOWNAME),4);
-    SendMessage(CreateWindowEx(WS_EX_TOPMOST|WS_EX_LAYERED,TEXT(MAIN_WINDOW_CLASS),TEXT(h::constGlobalData::MODE_INPUT),WS_CLIPCHILDREN|WS_VISIBLE|WS_POPUP,re[POS::X],re[POS::Y],re[POS::WIDTH],re[POS::HEIGHT],NULL,NULL,hInstance,NULL),WM_SETICON,ICON_BIG,(LPARAM)LoadIcon(hInstance,h::constGlobalData::ICON_NAME));
-    re=h::StrToInt(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_BORDER_COLOR),3);
+    auto re=h::StrToInt(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_BORDER_COLOR),3);
     h::global::borderBrush.reset(RGB(re[RGB::R],re[RGB::G],re[RGB::B]));
     re=h::StrToInt(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_BK_COLOR),3);
     h::global::bkBrush.reset(RGB(re[RGB::R],re[RGB::G],re[RGB::B]));
     h::global::font.reset(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(h::constGlobalData::SECTION_SHOW,h::constGlobalData::KEY_FONT));
+    re=h::StrToInt(h::INI(h::constGlobalData::SETTING_FILE).getData<h::INIT::keyT>(h::constGlobalData::SECTION_POS,MAINWINDOWNAME),4);
+    SendMessage(CreateWindowEx(WS_EX_TOPMOST|WS_EX_LAYERED,TEXT(MAIN_WINDOW_CLASS),TEXT(h::constGlobalData::MODE_INPUT),WS_CLIPCHILDREN|WS_VISIBLE|WS_POPUP,re[POS::X],re[POS::Y],re[POS::WIDTH],re[POS::HEIGHT],NULL,NULL,hInstance,NULL),WM_SETICON,ICON_BIG,(LPARAM)LoadIcon(hInstance,h::constGlobalData::ICON_NAME));
+    
     while(GetMessage(&msg,NULL,0,0)){
         TranslateMessage(&msg);
         DispatchMessage(&msg);
