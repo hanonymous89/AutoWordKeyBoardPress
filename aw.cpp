@@ -884,19 +884,19 @@ namespace h{
         CreateWindow(TEXT(h::constGlobalData::SETTING_WINDOW),TEXT(h::constGlobalData::SETTING_WINDOW),WS_VISIBLE|WS_OVERLAPPEDWINDOW|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,CW_USEDEFAULT,CW_USEDEFAULT,CW_USEDEFAULT,CW_USEDEFAULT,NULL,NULL,(HINSTANCE)GetModuleHandle(0),NULL);
         return DefWindowProc(hwnd,msg,wp,lp);
     }
-class btnProcWM_LBTNDown:public WndProcWM{
+    class btnProcWM_LBTNDown:public WndProcWM{
     inline LRESULT CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp);
 };
-class btnProcWM_LBTNUp:public WndProcWM{
+    class btnProcWM_LBTNUp:public WndProcWM{
     inline LRESULT CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp);
 };
-class btnProcWM_Paint:public WndProcWM{
+    class btnProcWM_Paint:public WndProcWM{
     inline LRESULT  CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp);
 };
-class btnProcCmd_Set:public WndProcWM{
+    class btnProcCmd_Set:public WndProcWM{
     inline LRESULT  CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp)override;
 };
-class btnProcCmd:public wndProcCMD{
+    class btnProcCmd:public wndProcCMD{
     private:
     btnProcCmd_Set set;
     public:
@@ -904,7 +904,7 @@ class btnProcCmd:public wndProcCMD{
         add(h::constGlobalData::BTN::SET_BTN,&set);
     }
 };
-class btnProc:public WndProc{
+    class btnProc:public WndProc{
     private:
     static std::unordered_map<HWND,btnData> data;
     btnProcWM_LBTNDown lBtnDown;
@@ -922,29 +922,29 @@ class btnProc:public WndProc{
         add(WM_COMMAND,&cmd);
     }
 };
-std::unordered_map<HWND,btnData> btnProc::data;
-inline LRESULT CALLBACK btnProcWM_LBTNDown::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
+    std::unordered_map<HWND,btnData> btnProc::data;
+    inline LRESULT CALLBACK btnProcWM_LBTNDown::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     btnProc::get(hwnd).flag=true;
     InvalidateRect(hwnd,NULL,TRUE);
     UpdateWindow(hwnd);
     return DefWindowProc(hwnd,msg,wp,lp);
 }
-inline LRESULT CALLBACK btnProcWM_LBTNUp::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
+    inline LRESULT CALLBACK btnProcWM_LBTNUp::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         btnProc::get(hwnd).flag=false;
     InvalidateRect(hwnd,NULL,TRUE);
     UpdateWindow(hwnd);
     if(GetParent(hwnd)==NULL)return DefWindowProc(hwnd,msg,wp,lp);
-    SendMessage(GetParent(hwnd),WM_COMMAND,MAKEWPARAM(btnProc::get(hwnd).msg,0),0);
+    SendMessage(GetParent(hwnd),WM_COMMAND,btnProc::get(hwnd).msg,0);
     return DefWindowProc(hwnd,msg,wp,lp);
 }
-inline LRESULT CALLBACK btnProcWM_Paint::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
+    inline LRESULT CALLBACK btnProcWM_Paint::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     RECT rect;
     PAINTSTRUCT ps;
     GetClientRect(hwnd,&rect);
     auto hdc=BeginPaint(hwnd,&ps);
     SetTextColor(hdc,h::customBool(btnProc::get(hwnd).flag,h::global::bkBrush.getBase(),h::global::borderBrush.getBase()));
     SetBkColor(hdc,h::customBool(btnProc::get(hwnd).flag,h::global::borderBrush.getBase(),h::global::bkBrush.getBase()));
-    SelectObject(hdc,h::global::bkBrush.getCreated());
+    SelectObject(hdc,h::customBool(btnProc::get(hwnd).flag,h::global::borderBrush.getCreated(),h::global::bkBrush.getCreated()));
     Rectangle(hdc,0,0,rect.right,rect.bottom);
     SelectObject(hdc,h::global::font.setHeight(rect.bottom/2).getCreated());
     DrawText(hdc,h::getWindowStr(hwnd).c_str(),-1,&rect,DT_CENTER|DT_WORDBREAK|DT_VCENTER);
@@ -952,14 +952,102 @@ inline LRESULT CALLBACK btnProcWM_Paint::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM 
     EndPaint(hwnd,&ps);
     return DefWindowProc(hwnd,msg,wp,lp);
 }
-inline LRESULT  CALLBACK btnProcCmd_Set::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
+    inline LRESULT  CALLBACK btnProcCmd_Set::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
             btnProc::get(hwnd).flag=((struct h::btnData*)lp)->flag;    
             btnProc::get(hwnd).msg=((struct h::btnData*)lp)->msg;
             return DefWindowProc(hwnd,msg,wp,lp);
 }
+    class titleProcWM_Create:public WndProcWM{
+    public:
+    inline LRESULT  CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp)override;
 };
-
-
+    class titleProcWM_LBTNDown:public WndProcWM{
+    public:
+    inline LRESULT  CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp)override;
+};
+    class titleProcWM_Paint:public WndProcWM{
+    public:
+    inline LRESULT  CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp)override{
+        RECT rect;
+        PAINTSTRUCT ps;
+        GetClientRect(hwnd,&rect);
+        auto hdc=BeginPaint(hwnd,&ps);
+        FrameRect(hdc,&rect,h::global::borderBrush.getCreated());
+        SelectObject(hdc,h::global::font.setHeight(rect.bottom).getCreated());
+        SetTextColor(hdc,h::global::borderBrush.getBase());
+        SetBkColor(hdc,h::global::bkBrush.getBase());
+        DrawText(hdc,h::getWindowStr(hwnd).c_str(),-1,&rect,DT_CENTER|DT_WORDBREAK|DT_VCENTER);
+        EndPaint(hwnd,&ps);
+        return DefWindowProc(hwnd,msg,wp,lp);
+    }
+};
+    class titleProcWM_RBTNDown:public WndProcWM{
+    public:
+    inline LRESULT  CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp)override{
+        if(GetParent(hwnd)==NULL)return DefWindowProc(hwnd,msg,wp,lp);;
+        SendMessage(GetParent(hwnd),msg,wp,lp);
+        return DefWindowProc(hwnd,msg,wp,lp);
+    }
+};
+    class titleProcCmd_Exit:public WndProcWM{
+    public:
+    inline LRESULT  CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp)override{
+        if(GetParent(hwnd)==NULL)return DefWindowProc(hwnd,msg,wp,lp);
+        SendMessage(GetParent(hwnd),WM_CLOSE,wp,lp);
+        return DefWindowProc(hwnd,msg,wp,lp);
+    }
+};
+    class titleProcCmd:public wndProcCMD{
+    private:
+    titleProcCmd_Exit exit;
+    public:
+    titleProcCmd();
+};
+    class titleProc:public WndProc{
+    public:
+    enum constData{
+        EXIT=10,
+        MOVEID
+    };
+    private:
+    titleProcWM_Create create;
+    titleProcWM_LBTNDown lBtnDown;
+    titleProcWM_Paint paint;
+    titleProcWM_RBTNDown rBtnDown;
+    titleProcCmd cmd;
+    public:
+    titleProc(){
+        add(WM_CREATE,&create);
+        add(WM_LBUTTONDOWN,&lBtnDown);
+        add(WM_PAINT,&paint);
+        add(WM_RBUTTONDOWN,&rBtnDown);
+        add(WM_COMMAND,&cmd);
+    }
+};
+    titleProcCmd::titleProcCmd(){
+        add(titleProc::constData::EXIT,&exit);
+    };
+    inline LRESULT  CALLBACK titleProcWM_LBTNDown::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
+        RECT rect;
+        POINT pos;
+        if(GetParent(hwnd)==NULL)return DefWindowProc(hwnd,msg,wp,lp);;
+        GetWindowRect(GetParent(hwnd),&rect);
+        GetCursorPos(&pos);
+        h::global::hash.x=pos.x-rect.left;
+        h::global::hash.y=pos.y-rect.top;
+        h::global::now.x=rect.right-rect.left;
+        h::global::now.y=rect.bottom-rect.top;
+        SetTimer(GetParent(hwnd),titleProc::constData::MOVEID,h::constGlobalData::MOUSE_UPDATA_COUNT,h::moveProc);
+        return DefWindowProc(hwnd,msg,wp,lp);
+    }
+    inline LRESULT  CALLBACK titleProcWM_Create::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
+        RECT rect;
+        GetClientRect(hwnd,&rect);
+        h::btnData btnData{0,titleProc::constData::EXIT};
+        SendMessage(CreateWindow(TEXT(h::constGlobalData::SIMPLEBTN_WINDOW),TEXT("X"),WS_VISIBLE|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,rect.right/10*9,0,rect.right/10,rect.bottom,hwnd,NULL,LPCREATESTRUCT(lp)->hInstance,NULL),WM_COMMAND,h::constGlobalData::BTN::SET_BTN,(LPARAM)&btnData);
+        return DefWindowProc(hwnd,msg,wp,lp);
+    }
+};
 int CALLBACK EnumFontFamProc(LOGFONT *lf,TEXTMETRIC * tm,DWORD fontType,LPARAM lp){
     if(h::global::vecStr==nullptr)return 0;
     h::global::vecStr->push_back(lf->lfFaceName);
@@ -1259,56 +1347,7 @@ LRESULT CALLBACK btnProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     return h::btnProc().Do(hwnd,msg,wp,lp);
 }
 LRESULT CALLBACK titleProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
-    RECT rect;
-    PAINTSTRUCT ps;
-    HDC hdc;
-    POINT pos;
-    constexpr int MOVEID=1;
-    enum MSG{
-        EXIT=10
-    };
-    switch(msg){
-        case WM_CREATE:
-        GetClientRect(hwnd,&rect);
-        {
-            h::btnData btnData{0,MSG::EXIT};
-            SendMessage(CreateWindow(TEXT(h::constGlobalData::SIMPLEBTN_WINDOW),TEXT("X"),WS_VISIBLE|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,rect.right/10*9,0,rect.right/10,rect.bottom,hwnd,NULL,LPCREATESTRUCT(lp)->hInstance,NULL),WM_COMMAND,h::constGlobalData::BTN::SET_BTN,(LPARAM)&btnData);
-        }
-        break;
-        case WM_LBUTTONDOWN:
-        if(GetParent(hwnd)==NULL)break;
-        GetWindowRect(GetParent(hwnd),&rect);
-        GetCursorPos(&pos);
-        h::global::hash.x=pos.x-rect.left;
-        h::global::hash.y=pos.y-rect.top;
-        h::global::now.x=rect.right-rect.left;
-        h::global::now.y=rect.bottom-rect.top;
-        SetTimer(GetParent(hwnd),MOVEID,h::constGlobalData::MOUSE_UPDATA_COUNT,h::moveProc);
-        break;
-        case WM_PAINT:
-        GetClientRect(hwnd,&rect);
-        hdc=BeginPaint(hwnd,&ps);
-        FrameRect(hdc,&rect,h::global::borderBrush.getCreated());
-        SelectObject(hdc,h::global::font.setHeight(rect.bottom).getCreated());
-        SetTextColor(hdc,h::global::borderBrush.getBase());
-        SetBkColor(hdc,h::global::bkBrush.getBase());
-        DrawText(hdc,h::getWindowStr(hwnd).c_str(),-1,&rect,DT_CENTER|DT_WORDBREAK|DT_VCENTER);
-        EndPaint(hwnd,&ps);
-        break;
-        case WM_RBUTTONDOWN:
-            if(GetParent(hwnd)==NULL)break;
-            SendMessage(GetParent(hwnd),msg,wp,lp);
-        break;
-        case WM_COMMAND:
-        switch(LOWORD(wp)){
-            case MSG::EXIT:
-            if(GetParent(hwnd)==NULL)break;
-            SendMessage(GetParent(hwnd),WM_CLOSE,0,0);
-            break;
-        }
-        break;
-    }
-    return DefWindowProc(hwnd,msg,wp,lp);
+    return h::titleProc().Do(hwnd,msg,wp,lp);
 }
 
 LRESULT CALLBACK menuProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
@@ -1396,4 +1435,3 @@ int WINAPI WinMain(HINSTANCE hInstance,HINSTANCE hPrevInstance,PSTR lpCmdLine,in
     }
     return msg.wParam;
 }
-//icon menu rc　全部使わない
