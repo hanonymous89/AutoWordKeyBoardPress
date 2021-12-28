@@ -1,4 +1,0 @@
-#define FILEOPEN 1000
-#define FILESAVE 1001
-#define SHOWHELP 1002
-#define OPENSETTING 1003
