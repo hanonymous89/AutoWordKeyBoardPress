@@ -143,6 +143,7 @@ namespace h{
 
             };
         };
+
         namespace global{
             std::vector<HWND> hwnds;
             std::vector<std::string> *vecStr;
@@ -150,6 +151,20 @@ namespace h{
                          bkBrush;
             fontManager font;
         };
+        template <class T>
+        bool beMapItem(T &map,typename T::key_type key){
+            return map.count(key);
+        }
+        // template <class T>
+        // inline void noHitMapValueReplace(T &map, typename T::key_type key, typename T::mapped_type replace=typename T::mapped_type()){
+        //     if(!beMapItem(map,key))map.emplace(key,replace);
+        //     // return map;
+        // }
+        template <class T>
+        inline T noHitMapValueReplace(T map, typename T::key_type key, typename T::mapped_type replace=typename T::mapped_type()){
+            if(!beMapItem(map,key))map.emplace(key,replace);
+            return map;
+        }
         inline std::string strUntil(std::string str,int until,int hash=0,std::string noMatch=""){
         if(0>hash||until+hash>str.size())return noMatch;
         return str.substr(hash,until);
@@ -193,14 +208,6 @@ namespace h{
             return customStoi(strUntil(str,maxLength));
         }
     };
-    template <class T>
-    inline auto absSub(const T left,const T right)noexcept(true){
-        return std::abs(left)-std::abs(right);
-    }
-    template <class T>
-    inline auto fitNum(const T num,const T left,const T right)noexcept(true){
-        return num-absSub(left,right);
-    }
     inline auto replaceAll(const std::string str,const std::string beforeStr,const std::string afterStr)noexcept(true){
         return std::regex_replace(str,std::regex(beforeStr),afterStr);
     }
@@ -217,14 +224,16 @@ namespace h{
         input.type=INPUT_KEYBOARD;
         input.ki.dwExtraInfo=input.ki.time=input.ki.wVk=0;
         for(auto &key:str){
-            if(key==ENTERWIDE){//key,tostring h::constglobaldata::enter
-                input.ki.wScan=VK_RETURN;
-                input.ki.wVk=MAKEWPARAM(VK_RETURN,0);
-            }
-            else{
-                input.ki.wScan=key;
-                input.ki.wVk=0;
-            }
+           input.ki.wScan=key;
+           input.ki.wVk=0;
+           noHitMapValueReplace(std::unordered_map<wchar_t,std::function<void()> >{
+               {
+                   ENTERWIDE,[&]()->void{
+                    input.ki.wScan=VK_RETURN;
+                    input.ki.wVk=MAKEWPARAM(VK_RETURN,0);                       
+                   }
+                }
+           },key,[]()->void{})[key]();
             input.ki.dwFlags=KEYEVENTF_UNICODE;
             SendInput(DATACOUNT,&input,sizeof(INPUT));
             input.ki.dwFlags|=KEYEVENTF_KEYUP;
@@ -246,12 +255,6 @@ namespace h{
         return linkStr(str,cast::toString(adds...));
     }
     
-    template <class T>
-    inline T clip(const T num,const T min,const T max)noexcept(true){
-        if(num<min)return min;
-        else if(max<num)return max;
-        return num;
-    }
     inline auto split(std::string str,const std::string cut) noexcept(false){
         std::vector<std::string> data;
         for(auto pos=str.find(cut);pos!=std::string::npos;pos=str.find(cut)){
@@ -275,14 +278,7 @@ namespace h{
         map.insert(std::move(node));
         return map;
     }
-    template <class T>
-    bool beMapItem(T &map,typename T::key_type key){
-        return map.count(key);
-    }
-    template <class T>
-    inline void noHitMapValueReplace(T &map, typename T::key_type key, typename T::mapped_type replace=typename T::mapped_type()){
-        if(!beMapItem(map,key))map.emplace(key,replace);
-    }
+
     inline auto getWindowStr(const HWND hwnd)noexcept(false){
         const int BUFSIZE=GetWindowTextLength(hwnd)+1;
         std::unique_ptr<TCHAR> text(new TCHAR[BUFSIZE]);
@@ -302,14 +298,14 @@ namespace h{
     };
     inline void windowLong(const HWND hwnd,UINT ws,const int mode=modeOperator::EQUAL,const bool Ex=false)noexcept(true){
         UINT style=Ex ? GWL_EXSTYLE:GWL_STYLE;
-        switch(mode){
-            case modeOperator::ADD:
-                ws|=GetWindowLong(hwnd,style);
-            break;
-            case modeOperator::SUB:
-                ws=GetWindowLong(hwnd,style)&~ws;
-            break;
-        }
+        std::unordered_map<int,std::function<void()> >{
+            {
+                modeOperator::ADD,[&]()->void{ws|=GetWindowLong(hwnd,style);}
+            },
+            {
+                modeOperator::SUB,[&]()->void{ws=GetWindowLong(hwnd,style)&~ws;}
+            }
+            }[mode]();
         SetWindowLong(hwnd,style,ws);
     }
     template <class RT,class... T>
@@ -745,7 +741,6 @@ namespace h{
         add(mainProc::MSG::MENU_FILE_SAVE,&save);
         add(mainProc::MSG::MENU_HEIP,&help);
         add(mainProc::MSG::MENU_SETTING,&setting);
-        // add(mainProc::MSG::S,setting)
     }
     LRESULT CALLBACK wndProcWM_Exit::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
             RECT rect;
@@ -859,13 +854,19 @@ namespace h{
     inline LRESULT CALLBACK wndProcCMD_Open::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         if(!mainProc::fileOpen())return DefWindowProc(hwnd,msg,wp,lp);
         auto l=((struct h::listData*)(SendMessage(mainProc::getHwnd(mainProc::HWNDS::list),WM_COMMAND,h::constGlobalData::LIST::GET_OBJ,0)))->list;
-        if(MessageBox(hwnd,TEXT("reset?"),TEXT("Question"),MB_ICONQUESTION|MB_YESNO)==IDNO){
-                auto a=h::split(h::File(mainProc::getPath()).read().getContent(),h::constGlobalData::CELEND);
-                l.insert(l.end(),a.begin(),a.end());
-        }
-        else{
-            l=h::split(h::File(mainProc::getPath()).read().getContent(),h::constGlobalData::CELEND);
-        }
+        std::unordered_map<int/*bool use[msgbox==idyes]*/,std::function<void()> >{
+            {//true
+                IDYES,[&]()->void{
+                    l=h::split(h::File(mainProc::getPath()).read().getContent(),h::constGlobalData::CELEND);
+                }
+            },
+            {//false
+                IDNO,[&]()->void{
+                    auto a=h::split(h::File(mainProc::getPath()).read().getContent(),h::constGlobalData::CELEND);
+                    l.insert(l.end(),a.begin(),a.end());
+                }
+            }
+        }[MessageBox(hwnd,TEXT("reset?"),TEXT("Question"),MB_ICONQUESTION|MB_YESNO)]();
             ((struct h::listData*)(SendMessage(mainProc::getHwnd(mainProc::HWNDS::list),WM_COMMAND,h::constGlobalData::LIST::GET_OBJ,0)))->list=l;
             SendMessage(((struct h::listData*)(SendMessage(mainProc::getHwnd(mainProc::HWNDS::list),WM_COMMAND,h::constGlobalData::LIST::GET_OBJ,0)))->scroll,WM_COMMAND,h::constGlobalData::SCROLL::SET_END,l.size());
         InvalidateRect(mainProc::getHwnd(mainProc::HWNDS::list),NULL,TRUE);
