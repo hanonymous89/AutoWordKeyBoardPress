@@ -1047,6 +1047,85 @@ namespace h{
         SendMessage(CreateWindow(TEXT(h::constGlobalData::SIMPLEBTN_WINDOW),TEXT("X"),WS_VISIBLE|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,rect.right/10*9,0,rect.right/10,rect.bottom,hwnd,NULL,LPCREATESTRUCT(lp)->hInstance,NULL),WM_COMMAND,h::constGlobalData::BTN::SET_BTN,(LPARAM)&btnData);
         return DefWindowProc(hwnd,msg,wp,lp);
     }
+    class menuProcCmd_Set:public WndProcWM{
+        public:
+        LRESULT  CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp)override;
+    };
+    class menuProcCmd:public wndProcCMD{
+        private:
+        menuProcCmd_Set set;
+        public:
+        menuProcCmd(){
+            add(h::constGlobalData::MENU::SET_MENU,&set);
+        }
+    };
+    class menuProcCmd_Reset:public WndProcWM{
+        public:
+        LRESULT  CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp)override;
+    };
+    class menuProcCmd_ResetFast:public WndProcWM{
+         public:
+         LRESULT  CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp)override;
+    };
+    class menuProc:public WndProc{
+        private:
+        static std::unordered_map<HWND,menuData> data;
+        menuProcCmd_ResetFast fast;
+        menuProcCmd cmd;
+        menuProcCmd_Reset reset;
+        public:
+        static auto &get(){
+            return data;
+        }
+        menuProc(){
+            add(WM_COMMAND,&fast);
+            add(WM_COMMAND,&cmd);
+            add(WM_COMMAND,&reset);
+        }
+    };
+    decltype(menuProc::data) menuProc::data;
+    inline LRESULT  CALLBACK menuProcCmd_Reset::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
+            if(wp==h::constGlobalData::MENU::SET_MENU||wp<menuProc::get()[hwnd].obj.size()||GetParent(hwnd)==NULL)return DefWindowProc(hwnd,msg,wp,lp);
+            SendMessage(GetParent(hwnd),WM_COMMAND,wp,0);
+            h::global::hwnds.clear();
+            EnumChildWindows(hwnd,h::addGlobalHwndsChild,0);
+            for(auto hw:h::global::hwnds){
+                ShowWindow(hw,SW_SHOW);
+            }
+            return DefWindowProc(hwnd,msg,wp,lp);
+    }
+    inline LRESULT  CALLBACK menuProcCmd_ResetFast::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
+        if(wp<menuProc::get()[hwnd].obj.size()){
+            ShowWindow(FindWindowEx(hwnd,NULL,TEXT(h::constGlobalData::SIMPLEBTN_WINDOW),menuProc::get()[hwnd].obj[wp].first.c_str()),SW_HIDE);
+        }
+        return 0;
+    }
+    inline LRESULT  CALLBACK menuProcCmd_Set::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
+        RECT rect;
+        GetClientRect(hwnd,&rect);
+        menuProc::get()[hwnd].obj=((struct h::menuData*)lp)->obj;
+        int i=0,oneSize=rect.right/menuProc::get()[hwnd].obj.size();
+        rect.right=oneSize;
+        for(auto &[section,list]:menuProc::get()[hwnd].obj){
+            RECT rectl{
+                rect.left,rect.top,rect.right,rect.bottom
+            };
+            int oneSizel=oneSize/list.size();
+            rectl.right=rect.left+oneSizel;
+            h::btnData btnData{0,i};
+            ++i;
+            SendMessage(CreateWindow(TEXT(h::constGlobalData::SIMPLEBTN_WINDOW),section.c_str(),WS_VISIBLE|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,rect.left,rect.top,rect.right-rect.left,rect.bottom-rect.top,hwnd,NULL,(HINSTANCE)GetModuleHandle(0),NULL),WM_COMMAND,h::constGlobalData::BTN::SET_BTN,(LPARAM)&btnData);
+            rect.left+=oneSize;
+            rect.right+=oneSize;
+            for(auto &[name,msg]:list){
+                btnData.msg=msg;
+                SendMessage(CreateWindow(TEXT(h::constGlobalData::SIMPLEBTN_WINDOW),name.c_str(),WS_VISIBLE|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,rectl.left,rectl.top,rectl.right-rectl.left,rectl.bottom-rectl.top,hwnd,NULL,(HINSTANCE)GetModuleHandle(0),NULL),WM_COMMAND,h::constGlobalData::BTN::SET_BTN,(LPARAM)&btnData);    
+                rectl.left+=oneSizel;
+                rectl.right+=oneSizel;
+            }           
+        }
+        return 0;
+    }
 };
 int CALLBACK EnumFontFamProc(LOGFONT *lf,TEXTMETRIC * tm,DWORD fontType,LPARAM lp){
     if(h::global::vecStr==nullptr)return 0;
@@ -1278,7 +1357,6 @@ namespace h{
 LRESULT CALLBACK scrollProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     return h::scrollProc().Do(hwnd,msg,wp,lp);
 }
-
 LRESULT CALLBACK settingProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     return h::settingProc().Do(hwnd,msg,wp,lp);
 }
@@ -1397,59 +1475,8 @@ LRESULT CALLBACK btnProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
 LRESULT CALLBACK titleProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     return h::titleProc().Do(hwnd,msg,wp,lp);
 }
-
 LRESULT CALLBACK menuProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
-    static std::unordered_map<HWND,h::menuData> data;
-    HDC hdc;
-    PAINTSTRUCT ps;
-    RECT rect;
-    switch(msg){
-        case WM_CREATE:
-            data[hwnd];
-        break;
-        case WM_COMMAND:
-            if(wp<data[hwnd].obj.size()){
-                ShowWindow(FindWindowEx(hwnd,NULL,TEXT(h::constGlobalData::SIMPLEBTN_WINDOW),data[hwnd].obj[wp].first.c_str()),SW_HIDE);
-                break;
-            }
-            switch(wp){
-                case h::constGlobalData::MENU::SET_MENU:
-                    GetClientRect(hwnd,&rect);
-                    data[hwnd].obj=((struct h::menuData*)lp)->obj;
-                    {
-                        int i=0,oneSize=rect.right/data[hwnd].obj.size();
-                        rect.right=oneSize;
-                        for(auto &[section,list]:data[hwnd].obj){
-                            RECT rectl{
-                                rect.left,rect.top,rect.right,rect.bottom
-                            };
-                            int oneSizel=oneSize/list.size();
-                            rectl.right=rect.left+oneSizel;
-                            h::btnData btnData{0,i};
-                            ++i;
-                            SendMessage(CreateWindow(TEXT(h::constGlobalData::SIMPLEBTN_WINDOW),section.c_str(),WS_VISIBLE|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,rect.left,rect.top,rect.right-rect.left,rect.bottom-rect.top,hwnd,NULL,(HINSTANCE)GetModuleHandle(0),NULL),WM_COMMAND,h::constGlobalData::BTN::SET_BTN,(LPARAM)&btnData);
-                            rect.left+=oneSize;
-                            rect.right+=oneSize;
-                            for(auto &[name,msg]:list){
-                                btnData.msg=msg;
-                                SendMessage(CreateWindow(TEXT(h::constGlobalData::SIMPLEBTN_WINDOW),name.c_str(),WS_VISIBLE|WS_CHILD|WS_CLIPCHILDREN|WS_CLIPSIBLINGS,rectl.left,rectl.top,rectl.right-rectl.left,rectl.bottom-rectl.top,hwnd,NULL,(HINSTANCE)GetModuleHandle(0),NULL),WM_COMMAND,h::constGlobalData::BTN::SET_BTN,(LPARAM)&btnData);    
-                                rectl.left+=oneSizel;
-                                rectl.right+=oneSizel;
-                            }
-                        }                        
-                    }
-                break;
-            }
-            if(GetParent(hwnd)==NULL)break;
-            SendMessage(GetParent(hwnd),WM_COMMAND,wp,0);
-            h::global::hwnds.clear();
-            EnumChildWindows(hwnd,h::addGlobalHwndsChild,0);
-            for(auto hw:h::global::hwnds){
-                ShowWindow(hw,SW_SHOW);
-            }
-        break;
-    }
-    return DefWindowProc(hwnd,msg,wp,lp);
+    return h::menuProc().Do(hwnd,msg,wp,lp);
 }
 LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     return h::mainProc().Do(hwnd,msg,wp,lp);
