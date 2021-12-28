@@ -1166,69 +1166,117 @@ namespace h{
         }
         return DefWindowProc(hwnd,msg,wp,lp);
     }
-};
-LRESULT CALLBACK scrollProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
-    PAINTSTRUCT ps;
-    HDC hdc;
-    RECT rect;
-    HBRUSH defb;
-    static std::unordered_map<HWND,h::scrollData> data;
-    switch(msg){
-        case WM_DESTROY:
-        data.clear();
-        break;
-        case WM_CREATE:
-        data[hwnd];
-        break;
-        case WM_LBUTTONDOWN:
-        case WM_MOUSEMOVE:
-        data[hwnd].is_move=0>GetAsyncKeyState(VK_LBUTTON);
-        if(!data[hwnd].is_move){
-            break;
+    class scrollProcWM_Destroy:public WndProcWM{
+        public:
+        LRESULT CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp ,LPARAM lp)override;
+    };
+    class scrollProcWM_Mouse:public WndProcWM{
+        public:
+        LRESULT CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp ,LPARAM lp)override;
+    };
+    class scrollProcWM_Paint:public WndProcWM{
+        public:
+        LRESULT CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp ,LPARAM lp)override;
+    };
+    class scrollProcCmd_Get:public WndProcWM{
+        public:
+        LRESULT CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp ,LPARAM lp)override;
+    };
+    class scrollProcCmd_Set:public WndProcWM{
+        public:
+        LRESULT CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp ,LPARAM lp)override;
+    };
+    class scrollProcCmd_SetEnd:public WndProcWM{
+        public:
+        LRESULT CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp ,LPARAM lp)override;
+    };
+    class scrollProcCmd:public wndProcCMD{
+        private:
+        scrollProcCmd_Get get;
+        scrollProcCmd_Set set;
+        scrollProcCmd_SetEnd end;
+        public:
+        scrollProcCmd(){
+            add(h::constGlobalData::SCROLL::GET_SCROLL,&get);
+            add(h::constGlobalData::SCROLL::SET,&set);
+            add(h::constGlobalData::SCROLL::SET_END,&end);
         }
-        data[hwnd].now=MAKEPOINTS(lp).x;
+
+    };
+    class scrollProc:public WndProc{//std::unordered_map<hwnd,T>data
+        private:
+        static std::unordered_map<HWND,scrollData> data;
+        scrollProcWM_Destroy destroy;
+        scrollProcWM_Mouse mouse;
+        scrollProcWM_Paint paint;
+        scrollProcCmd cmd;
+        public:
+        scrollProc(){
+            add(WM_LBUTTONDOWN,&mouse);
+            add(WM_MOUSEMOVE,&mouse);
+            add(WM_DESTROY,&destroy);
+            add(WM_PAINT,&paint);
+            add(WM_COMMAND,&cmd);
+        }
+        static auto &getData(){
+            return data;
+        }
+    };
+    std::unordered_map<HWND,scrollData> scrollProc::data;//decltype
+    LRESULT CALLBACK scrollProcWM_Destroy::Do(HWND hwnd,UINT msg,WPARAM wp ,LPARAM lp){
+        scrollProc::getData().clear();
+        return DefWindowProc(hwnd,msg,wp,lp);
+
+    }
+    LRESULT CALLBACK scrollProcWM_Mouse::Do(HWND hwnd,UINT msg,WPARAM wp ,LPARAM lp){
+        scrollProc::getData()[hwnd].is_move=0>GetAsyncKeyState(VK_LBUTTON);
+        if(!scrollProc::getData()[hwnd].is_move){
+            return DefWindowProc(hwnd,msg,wp,lp);
+        }
+        scrollProc::getData()[hwnd].now=MAKEPOINTS(lp).x;
         InvalidateRect(hwnd,NULL,TRUE);
         UpdateWindow(hwnd);
-        break;
-        case WM_PAINT:
+        return DefWindowProc(hwnd,msg,wp,lp);
+
+    }
+    LRESULT CALLBACK scrollProcWM_Paint::Do(HWND hwnd,UINT msg,WPARAM wp ,LPARAM lp){
+        RECT rect;
+        PAINTSTRUCT ps;
         GetClientRect(hwnd,&rect);
-        hdc=BeginPaint(hwnd,&ps);
+        auto hdc=BeginPaint(hwnd,&ps);
         SelectObject(hdc,h::global::font.setHeight(rect.bottom).getCreated());
-        defb=(HBRUSH)SelectObject(hdc,h::global::borderBrush.getCreated());
+        SelectObject(hdc,h::global::borderBrush.getCreated());
         SetTextColor(hdc,h::global::borderBrush.getBase());
         SetBkColor(hdc,h::global::bkBrush.getBase());
-        DrawText(hdc,(h::getWindowStr(hwnd)+h::cast::toString(data[hwnd].nowc)).c_str(),-1,&rect,DT_CENTER|DT_WORDBREAK|DT_VCENTER);
-        Rectangle(hdc,data[hwnd].now,0,data[hwnd].now+10,rect.bottom);
+        DrawText(hdc,(h::getWindowStr(hwnd)+h::cast::toString(scrollProc::getData()[hwnd].nowc)).c_str(),-1,&rect,DT_CENTER|DT_WORDBREAK|DT_VCENTER);
+        Rectangle(hdc,scrollProc::getData()[hwnd].now,0,scrollProc::getData()[hwnd].now+10,rect.bottom);
         FrameRect(hdc,&rect,h::global::borderBrush.getCreated());
-        {
-            int nowc=data[hwnd].now/(static_cast<double>(rect.right)/data[hwnd].end);
-            if(data[hwnd].nowc!=nowc&&GetParent(hwnd)!=NULL){
-            SendMessage(GetParent(hwnd),WM_COMMAND,h::constGlobalData::SCROLL::CHANGE,LPARAM(hwnd));
-            }
-            data[hwnd].nowc=nowc;
-
+        int nowc=scrollProc::getData()[hwnd].now/(static_cast<double>(rect.right)/scrollProc::getData()[hwnd].end);
+        if(scrollProc::getData()[hwnd].nowc!=nowc&&GetParent(hwnd)!=NULL){
+        SendMessage(GetParent(hwnd),WM_COMMAND,h::constGlobalData::SCROLL::CHANGE,LPARAM(hwnd));
         }
-        SelectObject(hdc,defb);
+        scrollProc::getData()[hwnd].nowc=nowc;
         EndPaint(hwnd,&ps);
-        break;
-        case WM_COMMAND:
-            switch(wp){
-                case h::constGlobalData::SCROLL::GET_SCROLL:
-                return data[hwnd].nowc;
-                case h::constGlobalData::SCROLL::SET:
-                data[hwnd].start=((struct h::scrollData*)lp)->start;
-                data[hwnd].end=((struct h::scrollData*)lp)->end;
-                data[hwnd].now=((struct h::scrollData*)lp)->now;
-                data[hwnd].is_move=((struct h::scrollData*)lp)->is_move;
-                data[hwnd].nowc=((struct h::scrollData*)lp)->nowc;
-                break;
-                case h::constGlobalData::SCROLL::SET_END:
-                data[hwnd].end=lp;
-                break;
-            }
-        break;
+        return DefWindowProc(hwnd,msg,wp,lp);
     }
-    return DefWindowProc(hwnd,msg,wp,lp);
+    LRESULT CALLBACK scrollProcCmd_Get::Do(HWND hwnd,UINT msg,WPARAM wp ,LPARAM lp){
+        return scrollProc::getData()[hwnd].nowc;
+    }
+    LRESULT CALLBACK scrollProcCmd_Set::Do(HWND hwnd,UINT msg,WPARAM wp ,LPARAM lp){
+        scrollProc::getData()[hwnd].start=((struct h::scrollData*)lp)->start;
+        scrollProc::getData()[hwnd].end=((struct h::scrollData*)lp)->end;
+        scrollProc::getData()[hwnd].now=((struct h::scrollData*)lp)->now;
+        scrollProc::getData()[hwnd].is_move=((struct h::scrollData*)lp)->is_move;
+        scrollProc::getData()[hwnd].nowc=((struct h::scrollData*)lp)->nowc;
+        return DefWindowProc(hwnd,msg,wp,lp);
+    }
+    LRESULT CALLBACK scrollProcCmd_SetEnd::Do(HWND hwnd,UINT msg,WPARAM wp ,LPARAM lp){
+        scrollProc::getData()[hwnd].end=lp;
+        return DefWindowProc(hwnd,msg,wp,lp);
+    }
+};
+LRESULT CALLBACK scrollProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
+    return h::scrollProc().Do(hwnd,msg,wp,lp);
 }
 
 LRESULT CALLBACK settingProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
