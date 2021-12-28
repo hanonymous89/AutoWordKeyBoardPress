@@ -1362,15 +1362,22 @@ namespace h{
         public:
         LRESULT CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp)override;
     };
+    class settingProc_Paint:public WndProcWM{
+        public:
+        LRESULT CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp)override;
+    };
+    
     class settingProcCMD_Change:public WndProcWM{
         public:
         LRESULT CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp)override;
     };
     class settingProcCMD:public wndProcCMD{
         private:
-
+        settingProcCMD_Change change;
         public:
-        settingProcCMD();
+        settingProcCMD(){
+            add(h::constGlobalData::SCROLL::CHANGE,&change);
+        }
     };
     class settingProc:public WndProc{
         public:
@@ -1382,8 +1389,9 @@ namespace h{
         static ResizeManager rm;
         settingProc_Destroy destroy;
         settingProc_Create create;
-        wndProcWM_PaintOfFrame paintOfFrame;
+        settingProc_Paint paint;
         settingProc_Resize resize;
+        settingProcCMD cmd;
         public:
         static auto setHwnd(HWND hwnd,int n){
             return hwnds[n]=hwnd;
@@ -1400,14 +1408,24 @@ namespace h{
         settingProc(){
             add(WM_DESTROY,&destroy);
             add(WM_CREATE,&create);
-            add(WM_PAINT,&paintOfFrame);
+            add(WM_PAINT,&paint);
             add(WM_SIZE,&resize);
+            add(WM_COMMAND,&cmd);
         }
     };
     HWND settingProc::hwnds[settingProc::HWNDS::fontList+1];
     ResizeManager settingProc::rm;
-    settingProcCMD::settingProcCMD(){
-
+    LRESULT CALLBACK settingProc_Paint::Do(HWND hwnd,UINT msg,WPARAM wp ,LPARAM lp){
+        PAINTSTRUCT ps;
+        RECT rect;
+        GetClientRect(hwnd,&rect);
+        auto hdc=BeginPaint(hwnd,&ps);
+        // global::borderBrush.reset(RGB(SendMessage(settingProc::getHwnd(settingProc::HWNDS::r),WM_COMMAND,h::constGlobalData::SCROLL::GET_SCROLL,0),SendMessage(settingProc::getHwnd(settingProc::HWNDS::g),WM_COMMAND,h::constGlobalData::SCROLL::GET_SCROLL,0),SendMessage(settingProc::getHwnd(settingProc::HWNDS::b),WM_COMMAND,h::constGlobalData::SCROLL::GET_SCROLL,0)));
+        // FrameRect(hdc,&rect,global::borderBrush.getCreated());
+        
+        FrameRect(hdc,&rect,colorManager(RGB(SendMessage(settingProc::getHwnd(settingProc::HWNDS::r),WM_COMMAND,h::constGlobalData::SCROLL::GET_SCROLL,0),SendMessage(settingProc::getHwnd(settingProc::HWNDS::g),WM_COMMAND,h::constGlobalData::SCROLL::GET_SCROLL,0),SendMessage(settingProc::getHwnd(settingProc::HWNDS::b),WM_COMMAND,h::constGlobalData::SCROLL::GET_SCROLL,0))).getCreated());
+        EndPaint(hwnd,&ps);
+        return DefWindowProc(hwnd,msg,wp,lp);
     }
     LRESULT CALLBACK settingProc_Create::Do(HWND hwnd,UINT msg,WPARAM wp ,LPARAM lp){
         RECT rect;
@@ -1534,7 +1552,8 @@ namespace h{
         SetBkColor(hdc,h::global::bkBrush.getBase());
         DrawText(hdc,(h::getWindowStr(hwnd)+h::cast::toString(scrollProc::getData()[hwnd].nowc)).c_str(),-1,&rect,DT_CENTER|DT_WORDBREAK|DT_VCENTER);
         Rectangle(hdc,scrollProc::getData()[hwnd].now,0,scrollProc::getData()[hwnd].now+10,rect.bottom);
-        FrameRect(hdc,&rect,h::global::borderBrush.getCreated());
+        // h::global::borderBrush.reset(RGB(SendMessage(settingProc::getHwnd(settingProc::HWNDS::r),WM_COMMAND,h::constGlobalData::SCROLL::GET_SCROLL,0),SendMessage(settingProc::getHwnd(settingProc::HWNDS::g),WM_COMMAND,h::constGlobalData::SCROLL::GET_SCROLL,0),SendMessage(settingProc::getHwnd(settingProc::HWNDS::b),WM_COMMAND,h::constGlobalData::SCROLL::GET_SCROLL,0)));
+        FrameRect(hdc,&rect,global::borderBrush.getCreated());
         int nowc=scrollProc::getData()[hwnd].now/(static_cast<double>(rect.right)/scrollProc::getData()[hwnd].end);
         if(scrollProc::getData()[hwnd].nowc!=nowc&&GetParent(hwnd)!=NULL){
         SendMessage(GetParent(hwnd),WM_COMMAND,h::constGlobalData::SCROLL::CHANGE,LPARAM(hwnd));
