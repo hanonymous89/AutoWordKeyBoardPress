@@ -113,7 +113,6 @@ namespace h{
                            SIMPLELIST_WINDOW="SIMPLELIST",
                            SETTING_WINDOW="SETTING",
                            CELEND="[CELEND]",
-                           REPLACE_ENTER="[ENTER]",
                            SECTION_STRING="STRING",
                            KEY_WORDLIST="wordList",
                            HELPHTML="EasyHelp.html";
@@ -538,7 +537,6 @@ namespace h{
     return TRUE;
     }
     class WndProcWM{
-    // private: UINT msg add(wmdproc* wm)wms[wm->msg]=wm
     public:
     virtual  LRESULT CALLBACK Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp)=0;
     };
@@ -846,7 +844,7 @@ namespace h{
          return DefWindowProc(hwnd,msg,wp,lp);
      }
      inline LRESULT CALLBACK wndProcCMD_Add::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
-         auto str=h::replaceAll(h::getWindowStr(mainProc::getHwnd(mainProc::HWNDS::edit)),"\r\n",h::constGlobalData::REPLACE_ENTER);
+         auto str=h::replaceAll(h::getWindowStr(mainProc::getHwnd(mainProc::HWNDS::edit)),"\r\n","[ENTER]");
          SendMessage(mainProc::getHwnd(mainProc::HWNDS::list),WM_COMMAND,h::constGlobalData::LIST::PUSH,(LPARAM)&str);
          return DefWindowProc(hwnd,msg,wp,lp);
      }
@@ -855,7 +853,7 @@ namespace h{
          return DefWindowProc(hwnd,msg,wp,lp);
     }
     inline LRESULT CALLBACK wndProcCMD_DBK::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
-        h::pressKeyAll(h::stringToWstring(h::replaceAll(((std::string*)SendMessage(mainProc::getHwnd(mainProc::HWNDS::list),WM_COMMAND,h::constGlobalData::LIST::GET_ITEM,SendMessage(mainProc::getHwnd(mainProc::HWNDS::list),WM_COMMAND,h::constGlobalData::LIST::GET_SELECT_INDEX,0)))->c_str(),h::constGlobalData::REPLACE_ENTER,h::constGlobalData::ENTER)));
+        h::pressKeyAll(h::stringToWstring(h::replaceAll(((std::string*)SendMessage(mainProc::getHwnd(mainProc::HWNDS::list),WM_COMMAND,h::constGlobalData::LIST::GET_ITEM,SendMessage(mainProc::getHwnd(mainProc::HWNDS::list),WM_COMMAND,h::constGlobalData::LIST::GET_SELECT_INDEX,0)))->c_str(),R"(\[ENTER\])",h::constGlobalData::ENTER)));
          return DefWindowProc(hwnd,msg,wp,lp);
     } 
     inline LRESULT CALLBACK wndProcCMD_Open::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
