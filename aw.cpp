@@ -1216,13 +1216,14 @@ namespace h{
     LRESULT  CALLBACK listProcWM_LBtnDown::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         RECT rect;
         GetClientRect(hwnd,&rect);
-        listProc::get()[hwnd].active=(MAKEPOINTS(lp).y/static_cast<double>(rect.bottom)/listProc::get()[hwnd].showItem)+SendMessage(listProc::get()[hwnd].scroll,WM_COMMAND,h::constGlobalData::SCROLL::GET_SCROLL,0)-1;
+        listProc::get()[hwnd].active=(MAKEPOINTS(lp).y/(static_cast<double>(rect.bottom)/listProc::get()[hwnd].showItem))+SendMessage(listProc::get()[hwnd].scroll,WM_COMMAND,h::constGlobalData::SCROLL::GET_SCROLL,0)-1;
         InvalidateRect(hwnd,NULL,TRUE);
         UpdateWindow(hwnd);
         return DefWindowProc(hwnd,msg,wp,lp);
     }
     LRESULT  CALLBACK listProcWM_DBC::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
-        if(GetParent(hwnd)==NULL)return DefWindowProc(hwnd,msg,wp,lp);;
+        MessageBox(0,cast::toString(listProc::get()[hwnd].active).c_str(),0,0);
+        if(GetParent(hwnd)==NULL)return DefWindowProc(hwnd,msg,wp,lp);
         SendMessage(GetParent(hwnd),WM_COMMAND,MAKEWPARAM(listProc::get()[hwnd].msg,listProc::get()[hwnd].msg),0);
         return DefWindowProc(hwnd,msg,wp,lp);
     }   
