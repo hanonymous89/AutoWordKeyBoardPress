@@ -9,7 +9,7 @@
 #include <utility>
 #include <memory>
 #include <limits>
-#include <cmath>
+#include <bitset>
 #include <functional>
 #include "rc.h"
 namespace h{
@@ -507,6 +507,8 @@ namespace h{
     enum MOUSEWNDEVENT{
         RESIZE_RB,
         RESIZE_LT,
+        RESIZE_RT,
+        RESIZE_LB,
         RESIZE_R,
         RESIZE_B,
         RESIZE_L,
@@ -520,12 +522,15 @@ namespace h{
     }
     POINT pos;
     GetCursorPos(&pos);
-    std::unordered_map<int,std::function<void()> >{//probable , you should use array
+    std::unordered_map<int,std::function<void()> >{//probable , you should use array or bit set
         {global::MOUSEWNDEVENT::MOVE,[&]()->void{
             MoveWindow(hwnd,pos.x-h::global::hash.x,pos.y-h::global::hash.y,h::global::now.x,h::global::now.y,TRUE);
         }},
         {global::MOUSEWNDEVENT::RESIZE_LT,[&]()->void{
             MoveWindow(hwnd,pos.x,pos.y,h::global::now.x-pos.x,h::global::now.y-pos.y,TRUE);
+        }},
+        {global::MOUSEWNDEVENT::RESIZE_LB,[&]()->void{
+            MoveWindow(hwnd,pos.x,global::now.y,h::global::now.x-pos.x,pos.y-h::global::now.y,TRUE);
         }},
         {global::MOUSEWNDEVENT::RESIZE_L,[&]()->void{
             MoveWindow(hwnd,pos.x,global::now.y,h::global::now.x-pos.x,h::global::hash.y,TRUE);
@@ -535,6 +540,9 @@ namespace h{
         }},
         {global::MOUSEWNDEVENT::RESIZE_RB,[&]()->void{
             MoveWindow(hwnd,h::global::now.x,h::global::now.y,pos.x-h::global::now.x,pos.y-h::global::now.y,TRUE);
+        }},
+        {global::MOUSEWNDEVENT::RESIZE_RT,[&]()->void{
+            MoveWindow(hwnd,h::global::now.x,pos.y,pos.x-h::global::now.x,h::global::now.y-pos.y,TRUE);
         }},
         {global::MOUSEWNDEVENT::RESIZE_R,[&]()->void{
             MoveWindow(hwnd,h::global::now.x,h::global::now.y,pos.x-h::global::now.x,h::global::hash.y,TRUE);
@@ -689,11 +697,7 @@ namespace h{
             MENU_FILE_SAVE,
             MENU_SETTING,
             MENU_HEIP
-        };
-        enum TIMER{
-            RESIZE_RB,
-            RESIZE_LT
-        };       
+        };      
         private:
         static HWND hwnds[list+1];
         wndProcWM_Exit exit;
@@ -835,65 +839,80 @@ namespace h{
              return DefWindowProc(hwnd,msg,wp,lp);
      }
      inline LRESULT CALLBACK wndProcWM_LBTNDown::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
-         RECT rect;
-         GetWindowRect(mainProc::getHwnd(mainProc::HWNDS::list),&rect);
-         GetCursorPos(&h::global::now);
-
-         if(h::global::now.x<rect.left&&h::global::now.y<rect.top){
-                 GetWindowRect(hwnd,&rect);
-             h::global::now.x=rect.right;
-             h::global::now.y=rect.bottom;
-             global::flagMouseWndEvent=global::MOUSEWNDEVENT::RESIZE_LT;
-             SetTimer(hwnd,global::MOUSEWNDEVENT::RESIZE_LT,h::constGlobalData::MOUSE_UPDATA_COUNT,mouseWndEventProc);        
-             return DefWindowProc(hwnd,msg,wp,lp);
-         }         
-         if(h::global::now.x<rect.left){
+        RECT rect,rb;
+        GetWindowRect(mainProc::getHwnd(mainProc::HWNDS::list),&rect);
+        GetWindowRect(mainProc::getHwnd(mainProc::HWNDS::sub),&rb);
+        GetCursorPos(&h::global::now);
+        if(h::global::now.x<rect.left&&h::global::now.y<rect.top){//bit flag lt
+               GetWindowRect(hwnd,&rect);
+               h::global::now.x=rect.right;
+               h::global::now.y=rect.bottom;
+               global::flagMouseWndEvent=global::MOUSEWNDEVENT::RESIZE_LT;
+               SetTimer(hwnd,0,h::constGlobalData::MOUSE_UPDATA_COUNT,mouseWndEventProc);        
+               return DefWindowProc(hwnd,msg,wp,lp);
+        }
+        if(h::global::now.x<rect.left&&rb.bottom<h::global::now.y){//bit flag lb
+               GetWindowRect(hwnd,&rect);
+               h::global::now.x=rect.right;
+               h::global::now.y=rect.top;
+               global::flagMouseWndEvent=global::MOUSEWNDEVENT::RESIZE_LB;
+               SetTimer(hwnd,0,h::constGlobalData::MOUSE_UPDATA_COUNT,mouseWndEventProc);        
+               return DefWindowProc(hwnd,msg,wp,lp);
+        }
+        if(h::global::now.y<rect.top&&rb.right<h::global::now.x){//bit flag rt
+               GetWindowRect(hwnd,&rect);
+               h::global::now.x=rect.left;
+               h::global::now.y=rect.bottom;
+               global::flagMouseWndEvent=global::MOUSEWNDEVENT::RESIZE_RT;
+               SetTimer(hwnd,0,h::constGlobalData::MOUSE_UPDATA_COUNT,mouseWndEventProc);        
+               return DefWindowProc(hwnd,msg,wp,lp);
+        }
+        if(h::global::now.x<rect.left){
+               GetWindowRect(hwnd,&rect);
+               h::global::hash.y=rect.bottom-rect.top;
+               h::global::now.x=rect.right;
+               h::global::now.y=rect.top;
+               global::flagMouseWndEvent=global::MOUSEWNDEVENT::RESIZE_L;
+               SetTimer(hwnd,0,h::constGlobalData::MOUSE_UPDATA_COUNT,mouseWndEventProc);        
+               return DefWindowProc(hwnd,msg,wp,lp);
+        }
+        if(h::global::now.y<rect.top){
+               GetWindowRect(hwnd,&rect);
+               h::global::hash.x=rect.right-rect.left;
+               h::global::now.x=rect.left;
+               h::global::now.y=rect.bottom;
+               global::flagMouseWndEvent=global::MOUSEWNDEVENT::RESIZE_T;
+               SetTimer(hwnd,0,h::constGlobalData::MOUSE_UPDATA_COUNT,mouseWndEventProc);        
+               return DefWindowProc(hwnd,msg,wp,lp);
+        }
+        //////////////////////////////////////////////////
+        if(rb.right<h::global::now.x&&rb.bottom<h::global::now.y){
+            GetWindowRect(hwnd,&rect);
+            h::global::now.x=rect.left;
+            h::global::now.y=rect.top;
+            global::flagMouseWndEvent=global::MOUSEWNDEVENT::RESIZE_RB;
+            SetTimer(hwnd,global::MOUSEWNDEVENT::RESIZE_RB,h::constGlobalData::MOUSE_UPDATA_COUNT,mouseWndEventProc);
+            return DefWindowProc(hwnd,msg,wp,lp);
+        }
+        if(rb.right<h::global::now.x){
             GetWindowRect(hwnd,&rect);
             h::global::hash.y=rect.bottom-rect.top;
-            h::global::now.x=rect.right;
+            h::global::now.x=rect.left;
             h::global::now.y=rect.top;
-            global::flagMouseWndEvent=global::MOUSEWNDEVENT::RESIZE_L;
-            SetTimer(hwnd,global::MOUSEWNDEVENT::RESIZE_L,h::constGlobalData::MOUSE_UPDATA_COUNT,mouseWndEventProc);        
+            global::flagMouseWndEvent=global::MOUSEWNDEVENT::RESIZE_R;
+            SetTimer(hwnd,global::MOUSEWNDEVENT::RESIZE_R,h::constGlobalData::MOUSE_UPDATA_COUNT,mouseWndEventProc);
             return DefWindowProc(hwnd,msg,wp,lp);
-         }
-         if(h::global::now.y<rect.top){
+        }
+        if(rb.bottom<h::global::now.y){
             GetWindowRect(hwnd,&rect);
             h::global::hash.x=rect.right-rect.left;
             h::global::now.x=rect.left;
-            h::global::now.y=rect.bottom;
-            global::flagMouseWndEvent=global::MOUSEWNDEVENT::RESIZE_T;
-            SetTimer(hwnd,global::MOUSEWNDEVENT::RESIZE_T,h::constGlobalData::MOUSE_UPDATA_COUNT,mouseWndEventProc);        
+            h::global::now.y=rect.top;
+            global::flagMouseWndEvent=global::MOUSEWNDEVENT::RESIZE_B;
+            SetTimer(hwnd,global::MOUSEWNDEVENT::RESIZE_B/*flag=b*/,h::constGlobalData::MOUSE_UPDATA_COUNT,mouseWndEventProc);
             return DefWindowProc(hwnd,msg,wp,lp);
-         }
-
-         GetWindowRect(mainProc::getHwnd(mainProc::HWNDS::sub),&rect);
-         if(rect.right<h::global::now.x&&rect.bottom<h::global::now.y){
-             GetWindowRect(hwnd,&rect);
-             h::global::now.x=rect.left;
-             h::global::now.y=rect.top;
-             global::flagMouseWndEvent=global::MOUSEWNDEVENT::RESIZE_RB;
-             SetTimer(hwnd,global::MOUSEWNDEVENT::RESIZE_RB,h::constGlobalData::MOUSE_UPDATA_COUNT,mouseWndEventProc);
-             return DefWindowProc(hwnd,msg,wp,lp);
-         }
-         if(rect.right<h::global::now.x){
-             GetWindowRect(hwnd,&rect);
-             h::global::hash.y=rect.bottom-rect.top;
-             h::global::now.x=rect.left;
-             h::global::now.y=rect.top;
-             global::flagMouseWndEvent=global::MOUSEWNDEVENT::RESIZE_R;
-             SetTimer(hwnd,global::MOUSEWNDEVENT::RESIZE_R,h::constGlobalData::MOUSE_UPDATA_COUNT,mouseWndEventProc);
-             return DefWindowProc(hwnd,msg,wp,lp);
-         }
-         if(rect.bottom<h::global::now.y){
-             GetWindowRect(hwnd,&rect);
-             h::global::hash.x=rect.right-rect.left;
-             h::global::now.x=rect.left;
-             h::global::now.y=rect.top;
-             global::flagMouseWndEvent=global::MOUSEWNDEVENT::RESIZE_B;
-             SetTimer(hwnd,global::MOUSEWNDEVENT::RESIZE_B/*flag=b*/,h::constGlobalData::MOUSE_UPDATA_COUNT,mouseWndEventProc);
-             return DefWindowProc(hwnd,msg,wp,lp);
-         }
-         return DefWindowProc(hwnd,msg,wp,lp);
+        }
+        return DefWindowProc(hwnd,msg,wp,lp);
      }
      inline LRESULT CALLBACK wndProcCMD_Add::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
          auto str=h::replaceAll(h::getWindowStr(mainProc::getHwnd(mainProc::HWNDS::edit)),"\r\n","[ENTER]");
