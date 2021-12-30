@@ -536,7 +536,7 @@ namespace h{
         {constGlobalData::top,[&]()->void{
             MoveWindow(hwnd,global::now.x,pos.y,global::hash.x,global::now.y-pos.y,TRUE);
         }},
-        {constGlobalData::right&constGlobalData::bottom,[&]()->void{
+        {constGlobalData::right|constGlobalData::bottom,[&]()->void{
             MoveWindow(hwnd,global::now.x,global::now.y,pos.x-global::now.x,pos.y-global::now.y,TRUE);
         }},
         {constGlobalData::right|constGlobalData::top,[&]()->void{
@@ -1425,8 +1425,6 @@ namespace h{
         RECT rect;
         GetClientRect(hwnd,&rect);
         auto hdc=BeginPaint(hwnd,&ps);
-        // global::borderBrush.reset(RGB(SendMessage(settingProc::getHwnd(settingProc::HWNDS::r),WM_COMMAND,h::constGlobalData::SCROLL::GET_SCROLL,0),SendMessage(settingProc::getHwnd(settingProc::HWNDS::g),WM_COMMAND,h::constGlobalData::SCROLL::GET_SCROLL,0),SendMessage(settingProc::getHwnd(settingProc::HWNDS::b),WM_COMMAND,h::constGlobalData::SCROLL::GET_SCROLL,0)));
-        // FrameRect(hdc,&rect,global::borderBrush.getCreated());
         FrameRect(hdc,&rect,colorManager(RGB(SendMessage(settingProc::getHwnd(settingProc::HWNDS::r),WM_COMMAND,h::constGlobalData::SCROLL::GET_SCROLL,0),SendMessage(settingProc::getHwnd(settingProc::HWNDS::g),WM_COMMAND,h::constGlobalData::SCROLL::GET_SCROLL,0),SendMessage(settingProc::getHwnd(settingProc::HWNDS::b),WM_COMMAND,h::constGlobalData::SCROLL::GET_SCROLL,0))).getCreated());
         EndPaint(hwnd,&ps);
         return DefWindowProc(hwnd,msg,wp,lp);
