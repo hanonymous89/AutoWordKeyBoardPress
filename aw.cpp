@@ -222,6 +222,32 @@ namespace h{
         MultiByteToWideChar(CP_ACP,0,str.c_str(),-1,wtext.get(),BUFSIZE);
         return std::wstring(wtext.get(),wtext.get()+BUFSIZE-1);
     }
+    template <class CT,class FT>
+    class branch{
+        private:
+        std::unordered_map<CT,FT> map;
+        FT noHit;
+        CT is;
+        public:
+        ~branch(){
+            map.clear();
+        }
+        auto &operator[](bool is){
+            this->is=is;
+            return *this;
+        }
+        auto &operator()(FT func){
+            map[is]=func;
+            return *this;
+        }
+        auto &operator<<(FT func){
+            noHit=func;
+            return *this;
+        }
+        auto operator>>(CT is){
+            return noHitMapValueReplace(map,is,noHit)[is]();
+        }
+    };
     inline auto pressKeyAll(const std::wstring str)noexcept(true){
         constexpr int DATACOUNT=1;
         constexpr int ENTERWIDE=L'\n';
@@ -231,14 +257,11 @@ namespace h{
         for(auto &key:str){
            input.ki.wScan=key;
            input.ki.wVk=0;
-           returnNoHitMapValueReplace(std::unordered_map<wchar_t,std::function<void()> >{
-               {
-                   ENTERWIDE,[&]()->void{
+           branch<wchar_t,std::function<void()> >()
+           [ENTERWIDE]([&]{
                     input.ki.wScan=VK_RETURN;
                     input.ki.wVk=MAKEWPARAM(VK_RETURN,0);                       
-                   }
-                }
-           },key,[]()->void{})[key]();
+            })<<([]{})>>key;
             input.ki.dwFlags=KEYEVENTF_UNICODE;
             SendInput(DATACOUNT,&input,sizeof(INPUT));
             input.ki.dwFlags|=KEYEVENTF_KEYUP;
@@ -348,6 +371,7 @@ namespace h{
         }
         return list;
     }
+
     class File{
         private:
         std::string name,
@@ -526,55 +550,38 @@ namespace h{
         return;
     }
     RECT rect;
-    returnNoHitMapValueReplace(std::unordered_map<bool,std::function<void()> >{
-    {idEvent&constGlobalData::left,[&]{        
+    branch<bool,std::function<void()> >()
+    [idEvent&constGlobalData::left]
+    ([&]{        
         rect.left=pos.x;
         rect.right=global::now.x-pos.x;        
-        }},
-    {idEvent&constGlobalData::right,[&]{
+        })
+    [idEvent&constGlobalData::right]
+    ([&]{
         rect.left=global::now.x;
         rect.right=pos.x-global::now.x;
-    }},
-    },true,[&]{
+    })<<(
+        [&]{
         rect.left=global::now.x;
         rect.right=global::hash.x;
-        })[true]();
-    // if(idEvent&constGlobalData::left){//入れ替える　二つのやつ使う
-    //     rect.left=pos.x;
-    //     rect.right=global::now.x-pos.x;
-    // }
-    // else if(idEvent&constGlobalData::right){
-    //     rect.left=global::now.x;
-    //     rect.right=pos.x-global::now.x;
-    // }
-    // else{
-    //     rect.left=global::now.x;
-    //     rect.right=global::hash.x;
-    // }
-    // if(idEvent&constGlobalData::top){
-    //     rect.top=pos.y;
-    //     rect.bottom=global::now.y-pos.y;
-    // }
-    // else if(idEvent&constGlobalData::bottom){
-    //     rect.top=global::now.y;
-    //     rect.bottom=pos.y-global::now.y;
-    // }else{
-        // rect.top=global::now.y;
-        // rect.bottom=global::hash.y; 
-    // }
-    returnNoHitMapValueReplace(std::unordered_map<bool,std::function<void()> >{
-    {idEvent&constGlobalData::top,[&]{        
+        }
+    )>>true;
+    branch<bool,std::function<void()> >()
+    [idEvent&constGlobalData::top]
+    ([&]{        
         rect.top=pos.y;
         rect.bottom=global::now.y-pos.y;     
-        }},
-    {idEvent&constGlobalData::bottom,[&]{
+        })
+    [idEvent&constGlobalData::bottom]
+    ([&]{
         rect.top=global::now.y;
         rect.bottom=pos.y-global::now.y;
-    }},
-    },true,[&]{
+    })<<(
+        [&]{
         rect.top=global::now.y;
         rect.bottom=global::hash.y; 
-        })[true]();
+        }
+    )>>true;
     MoveWindow(hwnd,rect.left,rect.top,rect.right,rect.bottom,TRUE);
     }
     BOOL CALLBACK addGlobalHwndsChild(HWND hwnd,LPARAM lp){
@@ -872,46 +879,32 @@ namespace h{
         GetCursorPos(&h::global::now);
         global::hash.y=hwndRe.bottom-hwndRe.top;
         global::hash.x=hwndRe.right-hwndRe.left;
-        returnNoHitMapValueReplace(std::unordered_map<bool,std::function<void()> >{
-            {h::global::now.x<tl.left,[&]{        
+        branch<bool,std::function<void()> >()
+        [h::global::now.x<tl.left]
+        ([&]{        
                 global::now.x=hwndRe.right;
                 mouseflag|=constGlobalData::left;
-                }},
-            {rb.right<h::global::now.x,[&]{
+        })
+        [rb.right<h::global::now.x]
+        ([&]{
                 global::now.x=hwndRe.left;
                 mouseflag|=constGlobalData::right; 
-            }},
-        },true,[&]{h::global::now.x=hwndRe.left;})[true]();
-        // if(h::global::now.x<tl.left){
-        //     global::now.x=hwndRe.right;
-        //     mouseflag|=constGlobalData::left;
-
-        // }else if(rb.right<h::global::now.x){
-            
-        //     global::now.x=hwndRe.left;
-        //     mouseflag|=constGlobalData::right;
-        // }else{
-        //     h::global::now.x=hwndRe.left;
-        // }
-        returnNoHitMapValueReplace(std::unordered_map<bool,std::function<void()> >{
-            {h::global::now.y<tl.top,[&]{        
+        })
+        <<([&]{h::global::now.x=hwndRe.left;})
+        >>true;
+        branch<bool,std::function<void()> >()
+        [h::global::now.y<tl.top]
+        ([&]{        
             h::global::now.y=hwndRe.bottom;   
             mouseflag|=constGlobalData::top;
-                }},
-            {rb.bottom<h::global::now.y,[&]{
+        })
+        [rb.bottom<h::global::now.y]
+        ([&]{
             h::global::now.y=hwndRe.top;
             mouseflag|=constGlobalData::bottom;
-                }},
-        },true,[&]{h::global::now.y=hwndRe.top;})[true]();
-        // if(h::global::now.y<tl.top){
-        //     h::global::now.y=hwndRe.bottom;   
-        //     mouseflag|=constGlobalData::top;
-        // }else if(rb.bottom<h::global::now.y){
-        //     h::global::now.y=hwndRe.top;
-        //     mouseflag|=constGlobalData::bottom;
-        // }else{
-        //     h::global::now.y=hwndRe.top;
-        // }
+        })
+        <<([&]{h::global::now.y=hwndRe.top;})
+        >>true;
         SetTimer(hwnd,mouseflag,h::constGlobalData::MOUSE_UPDATA_COUNT,mouseWndEventProc);        
         return DefWindowProc(hwnd,msg,wp,lp);
      }
@@ -931,19 +924,17 @@ namespace h{
     inline LRESULT CALLBACK wndProcCMD_Open::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         if(!mainProc::fileOpen())return DefWindowProc(hwnd,msg,wp,lp);
         auto l=((struct h::listData*)(SendMessage(mainProc::getHwnd(mainProc::HWNDS::list),WM_COMMAND,h::constGlobalData::LIST::GET_OBJ,0)))->list;
-        std::unordered_map<int/*bool use[msgbox==idyes]*/,std::function<void()> >{
-            {//true
-                IDYES,[&]()->void{
+        branch<bool,std::function<void()> >()
+        [true](
+            [&]{
                     l=h::split(h::File(mainProc::getPath()).read().getContent(),h::constGlobalData::CELEND);
-                }
-            },
-            {//false
-                IDNO,[&]()->void{
+            }
+        )
+        <<([&]{
                     auto a=h::split(h::File(mainProc::getPath()).read().getContent(),h::constGlobalData::CELEND);
                     l.insert(l.end(),a.begin(),a.end());
-                }
-            }
-        }[MessageBox(hwnd,TEXT("reset?"),TEXT("Question"),MB_ICONQUESTION|MB_YESNO)]();
+        })
+        >>(MessageBox(hwnd,TEXT("reset?"),TEXT("Question"),MB_ICONQUESTION|MB_YESNO)==IDYES);
             ((struct h::listData*)(SendMessage(mainProc::getHwnd(mainProc::HWNDS::list),WM_COMMAND,h::constGlobalData::LIST::GET_OBJ,0)))->list=l;
             SendMessage(((struct h::listData*)(SendMessage(mainProc::getHwnd(mainProc::HWNDS::list),WM_COMMAND,h::constGlobalData::LIST::GET_OBJ,0)))->scroll,WM_COMMAND,h::constGlobalData::SCROLL::SET_END,l.size());
         InvalidateRect(mainProc::getHwnd(mainProc::HWNDS::list),NULL,TRUE);
