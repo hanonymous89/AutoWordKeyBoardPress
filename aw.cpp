@@ -393,8 +393,9 @@ namespace h{
         INIT::sectionT data;
         inline const INI analysis() noexcept(false){
             auto lines=split(read().getContent(),constGlobalData::ENTER);
+            std::string section;
             for(auto &line:lines){
-                static std::string section;
+                //static section
                 if(line[0]==SECTIONLEFT&&line[line.size()-1]==SECTIONRIGHT){
                     section=strUntil(line,line.size()-2,1);
                     continue;
@@ -513,43 +514,68 @@ namespace h{
         MOVE=4649
     };
     };
-    VOID CALLBACK mouseWndEventProc(HWND hwnd , UINT uMsg ,UINT idEvent , DWORD dwTime) {
+    VOID CALLBACK mouseWndEventProc(HWND hwnd , UINT uMsg ,UINT idEvent , DWORD dwTime) {//class <size_t n> で処理を特区主家できるかも~
     if(0<=GetAsyncKeyState(VK_LBUTTON)){
         KillTimer(hwnd,idEvent);
         return;
     }
     POINT pos;
     GetCursorPos(&pos);
-    returnNoHitMapValueReplace(std::unordered_map<unsigned int,std::function<void()> >{//probable , you should use array or bit set
-        {global::MOUSEWNDEVENT::MOVE,[&]()->void{
-            MoveWindow(hwnd,pos.x-global::hash.x,pos.y-global::hash.y,global::now.x,global::now.y,TRUE);
+    if(global::MOUSEWNDEVENT::MOVE==idEvent){
+        MoveWindow(hwnd,pos.x-global::hash.x,pos.y-global::hash.y,global::now.x,global::now.y,TRUE);
+        return;
+    }
+    RECT rect;
+    returnNoHitMapValueReplace(std::unordered_map<bool,std::function<void()> >{
+    {idEvent&constGlobalData::left,[&]{        
+        rect.left=pos.x;
+        rect.right=global::now.x-pos.x;        
         }},
-        {constGlobalData::left|constGlobalData::top,[&]()->void{
-            MoveWindow(hwnd,pos.x,pos.y,global::now.x-pos.x,global::now.y-pos.y,TRUE);
+    {idEvent&constGlobalData::right,[&]{
+        rect.left=global::now.x;
+        rect.right=pos.x-global::now.x;
+    }},
+    },true,[&]{
+        rect.left=global::now.x;
+        rect.right=global::hash.x;
+        })[true]();
+    // if(idEvent&constGlobalData::left){//入れ替える　二つのやつ使う
+    //     rect.left=pos.x;
+    //     rect.right=global::now.x-pos.x;
+    // }
+    // else if(idEvent&constGlobalData::right){
+    //     rect.left=global::now.x;
+    //     rect.right=pos.x-global::now.x;
+    // }
+    // else{
+    //     rect.left=global::now.x;
+    //     rect.right=global::hash.x;
+    // }
+    // if(idEvent&constGlobalData::top){
+    //     rect.top=pos.y;
+    //     rect.bottom=global::now.y-pos.y;
+    // }
+    // else if(idEvent&constGlobalData::bottom){
+    //     rect.top=global::now.y;
+    //     rect.bottom=pos.y-global::now.y;
+    // }else{
+        // rect.top=global::now.y;
+        // rect.bottom=global::hash.y; 
+    // }
+    returnNoHitMapValueReplace(std::unordered_map<bool,std::function<void()> >{
+    {idEvent&constGlobalData::top,[&]{        
+        rect.top=pos.y;
+        rect.bottom=global::now.y-pos.y;     
         }},
-        {constGlobalData::left|constGlobalData::bottom,[&]()->void{
-            MoveWindow(hwnd,pos.x,global::now.y,global::now.x-pos.x,pos.y-global::now.y,TRUE);
-        }},
-        {constGlobalData::left,[&]()->void{
-            MoveWindow(hwnd,pos.x,global::now.y,global::now.x-pos.x,global::hash.y,TRUE);
-        }},
-        {constGlobalData::top,[&]()->void{
-            MoveWindow(hwnd,global::now.x,pos.y,global::hash.x,global::now.y-pos.y,TRUE);
-        }},
-        {constGlobalData::right|constGlobalData::bottom,[&]()->void{
-            MoveWindow(hwnd,global::now.x,global::now.y,pos.x-global::now.x,pos.y-global::now.y,TRUE);
-        }},
-        {constGlobalData::right|constGlobalData::top,[&]()->void{
-            MoveWindow(hwnd,global::now.x,pos.y,pos.x-global::now.x,global::now.y-pos.y,TRUE);
-        }},
-        {constGlobalData::right,[&]()->void{
-            MoveWindow(hwnd,global::now.x,global::now.y,pos.x-global::now.x,global::hash.y,TRUE);
-        }},
-        {constGlobalData::bottom,[&]()->void{
-            MoveWindow(hwnd,global::now.x,global::now.y,global::hash.x,pos.y-global::now.y,TRUE);
-        }}
-
-    },idEvent,[]{})[idEvent]();
+    {idEvent&constGlobalData::bottom,[&]{
+        rect.top=global::now.y;
+        rect.bottom=pos.y-global::now.y;
+    }},
+    },true,[&]{
+        rect.top=global::now.y;
+        rect.bottom=global::hash.y; 
+        })[true]();
+    MoveWindow(hwnd,rect.left,rect.top,rect.right,rect.bottom,TRUE);
     }
     BOOL CALLBACK addGlobalHwndsChild(HWND hwnd,LPARAM lp){
     h::global::hwnds.push_back(hwnd);
@@ -840,34 +866,52 @@ namespace h{
      inline LRESULT CALLBACK wndProcWM_LBTNDown::Do(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         RECT tl,rb,hwndRe;
         unsigned int mouseflag=0;
-        GetWindowRect(mainProc::getHwnd(mainProc::HWNDS::list),&tl);
+        GetWindowRect(mainProc::getHwnd(mainProc::HWNDS::title),&tl);
         GetWindowRect(mainProc::getHwnd(mainProc::HWNDS::sub),&rb);
         GetWindowRect(hwnd,&hwndRe);
         GetCursorPos(&h::global::now);
         global::hash.y=hwndRe.bottom-hwndRe.top;
         global::hash.x=hwndRe.right-hwndRe.left;
-        if(h::global::now.x<tl.left){
-            global::now.x=hwndRe.right;
-            mouseflag|=constGlobalData::left;
+        returnNoHitMapValueReplace(std::unordered_map<bool,std::function<void()> >{
+            {h::global::now.x<tl.left,[&]{        
+                global::now.x=hwndRe.right;
+                mouseflag|=constGlobalData::left;
+                }},
+            {rb.right<h::global::now.x,[&]{
+                global::now.x=hwndRe.left;
+                mouseflag|=constGlobalData::right; 
+            }},
+        },true,[&]{h::global::now.x=hwndRe.left;})[true]();
+        // if(h::global::now.x<tl.left){
+        //     global::now.x=hwndRe.right;
+        //     mouseflag|=constGlobalData::left;
 
-        }else if(rb.right<h::global::now.x){
+        // }else if(rb.right<h::global::now.x){
             
-            global::now.x=hwndRe.left;
-            mouseflag|=constGlobalData::right;
-        }
-        if(h::global::now.y<tl.top){
+        //     global::now.x=hwndRe.left;
+        //     mouseflag|=constGlobalData::right;
+        // }else{
+        //     h::global::now.x=hwndRe.left;
+        // }
+        returnNoHitMapValueReplace(std::unordered_map<bool,std::function<void()> >{
+            {h::global::now.y<tl.top,[&]{        
             h::global::now.y=hwndRe.bottom;   
             mouseflag|=constGlobalData::top;
-        }else if(rb.bottom<h::global::now.y){
+                }},
+            {rb.bottom<h::global::now.y,[&]{
             h::global::now.y=hwndRe.top;
             mouseflag|=constGlobalData::bottom;
-        }
-        if(mouseflag==constGlobalData::left||mouseflag==constGlobalData::right){
-            h::global::now.y=hwndRe.top;
-        }
-        if(mouseflag==constGlobalData::top||mouseflag==constGlobalData::bottom){
-            h::global::now.x=hwndRe.left;
-        }//もっと工夫したら処理減らせるこの二つがヒットしたらあとは処理しないとか
+                }},
+        },true,[&]{h::global::now.y=hwndRe.top;})[true]();
+        // if(h::global::now.y<tl.top){
+        //     h::global::now.y=hwndRe.bottom;   
+        //     mouseflag|=constGlobalData::top;
+        // }else if(rb.bottom<h::global::now.y){
+        //     h::global::now.y=hwndRe.top;
+        //     mouseflag|=constGlobalData::bottom;
+        // }else{
+        //     h::global::now.y=hwndRe.top;
+        // }
         SetTimer(hwnd,mouseflag,h::constGlobalData::MOUSE_UPDATA_COUNT,mouseWndEventProc);        
         return DefWindowProc(hwnd,msg,wp,lp);
      }
