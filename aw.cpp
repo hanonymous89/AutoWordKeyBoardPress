@@ -11,7 +11,6 @@
 #include <limits>
 #include <bitset>
 #include <functional>
-#include "rc.h"
 namespace h{
         
         template <class BT,class CT>
@@ -29,7 +28,7 @@ namespace h{
             virtual CT &getCreated()=0;
             virtual void reset(BT base)=0;
             
-        };//hdc!!!
+        };
         class colorManager:private ObjectManager<COLORREF,HBRUSH>{
             private:
             void cr(COLORREF base) override{
