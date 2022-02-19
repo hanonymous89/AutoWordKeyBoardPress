@@ -1,5 +1,2 @@
 # AutoWord
-/*
-I think this program is all bad. So I want you to help me code. I'm sorry! I'm not good at English...
- I'm a beginner...
-*/
+作っていってる中で、コードが汚くなりすぎたので書き直し予定です
